@@ -160,9 +160,7 @@ class PickResourceGoal(Goal):
             usable = [
                 (pos, e)
                 for pos, e in extractors
-                if e.properties.get("remaining_uses", 999) > 0
-                and e.properties.get("inventory_amount", -1) != 0
-                and not _extractor_recently_failed(ctx, pos)
+                if e.properties.get("inventory_amount", -1) != 0 and not _extractor_recently_failed(ctx, pos)
             ]
             if usable:
                 available_resources.append((team_resources.get(resource, 0), resource))
@@ -363,9 +361,7 @@ class MineResourceGoal(Goal):
         usable = [
             (pos, e)
             for pos, e in extractors
-            if e.properties.get("remaining_uses", 999) > 0
-            and e.properties.get("inventory_amount", -1) != 0
-            and not _extractor_recently_failed(ctx, pos)
+            if e.properties.get("inventory_amount", -1) != 0 and not _extractor_recently_failed(ctx, pos)
         ]
 
         if not usable:

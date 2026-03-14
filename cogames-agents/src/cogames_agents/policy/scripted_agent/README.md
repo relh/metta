@@ -245,8 +245,6 @@ Agents parse egocentric observations (11×11 grid) to detect:
 class ExtractorInfo:
     position: tuple[int, int]
     resource_type: str  # "carbon", "oxygen", "germanium", "silicon"
-    remaining_uses: int
-    clipped: bool       # For UnclippingAgent
 ```
 
 ## Testing

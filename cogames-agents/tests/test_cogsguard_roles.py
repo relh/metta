@@ -57,7 +57,6 @@ def test_alignment_uses_team_tags(policy_env_info: PolicyEnvInterface) -> None:
     assert (
         policy._derive_alignment(
             "junction",
-            False,
             StructureType.CHARGER,
             tags=["team:cogs"],
         )
@@ -66,7 +65,6 @@ def test_alignment_uses_team_tags(policy_env_info: PolicyEnvInterface) -> None:
     assert (
         policy._derive_alignment(
             "junction",
-            False,
             StructureType.CHARGER,
             tags=["team:clips"],
         )
@@ -75,7 +73,6 @@ def test_alignment_uses_team_tags(policy_env_info: PolicyEnvInterface) -> None:
     assert (
         policy._derive_alignment(
             "junction",
-            False,
             StructureType.CHARGER,
             tags=[],
         )

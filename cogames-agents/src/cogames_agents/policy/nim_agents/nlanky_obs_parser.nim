@@ -60,7 +60,7 @@ proc resolveObjectName(parser: ObsParser, tagIds: seq[int]): string =
         return tag
   "unknown"
 
-proc deriveAlignment(objName: string, clipped: int, aoeMask: int, tagNames: seq[string], tagIds: seq[int]): Alignment =
+proc deriveAlignment(objName: string, aoeMask: int, tagNames: seq[string], tagIds: seq[int]): Alignment =
   for tid in tagIds:
     if tid >= 0 and tid < tagNames.len:
       let tag = tagNames[tid]
@@ -73,7 +73,7 @@ proc deriveAlignment(objName: string, clipped: int, aoeMask: int, tagNames: seq[
     return alNone
   if "c:" in objName:
     return alCogs
-  if "clips" in objName or clipped > 0:
+  if "clips" in objName:
     return alClips
   if aoeMask == 1:
     return alCogs
@@ -132,9 +132,7 @@ proc parse*(
       continue
 
     var tagIds: seq[int] = @[]
-    var clipped = 0
     var aoeMask = 0
-    var remainingUses = 999
     var invByName = initTable[string, int]()
 
     for fv in feats:
@@ -158,20 +156,11 @@ proc parse*(
           else:
             invByName[suffix] = invByName.getOrDefault(suffix, 0) + fv.value
 
-    if cfg.features.clipped != 0:
-      clipped = featureValueAt(feats, cfg.features.clipped)
-      if clipped == -1:
-        clipped = 0
     if cfg.features.aoeMask != 0:
       # Guard optional aoe_mask explicitly so missing configs never read feature id 0.
       aoeMask = featureValueAt(feats, cfg.features.aoeMask)
       if aoeMask == -1:
         aoeMask = 0
-    if cfg.features.remainingUses != 0:
-      remainingUses = featureValueAt(feats, cfg.features.remainingUses)
-      if remainingUses == -1:
-        remainingUses = 999
-
     if tagIds.len == 0:
       continue
 
@@ -186,13 +175,11 @@ proc parse*(
         invAmount += v
 
     let absPos = Location(x: s.position.x + relLoc.x, y: s.position.y + relLoc.y)
-    let alignment = deriveAlignment(objName, clipped, aoeMask, parser.tagNames, tagIds)
+    let alignment = deriveAlignment(objName, aoeMask, parser.tagNames, tagIds)
 
     ents[absPos] = Entity(
       kind: objName,
       alignment: alignment,
-      clipped: clipped,
-      remainingUses: remainingUses,
       inventoryAmount: invAmount,
       lastSeen: step,
     )

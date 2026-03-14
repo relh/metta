@@ -23,7 +23,6 @@ type
     map: Table[Location, seq[FeatureValue]]
     seen: HashSet[Location]
     unreachable: HashSet[Location]
-    depleted: HashSet[Location]    # extractors/junctions with remainingUses == 0
     cfg: Config
     random: Rand
     location: Location
@@ -108,7 +107,6 @@ proc newRaceCarAgent*(agentId: int, environmentConfig: string): RaceCarAgent =
   result.map = initTable[Location, seq[FeatureValue]]()
   result.seen = initHashSet[Location]()
   result.unreachable = initHashSet[Location]()
-  result.depleted = initHashSet[Location]()
   result.location = Location(x: 0, y: 0)
   result.assignedVibe = none(int)
   result.needsPatternReapply = false
@@ -145,10 +143,6 @@ proc updateMap(agent: RaceCarAgent, visible: Table[Location, seq[FeatureValue]])
       let visibleLocation = Location(x: x, y: y)
       let mapLocation = Location(x: x + agent.location.x, y: y + agent.location.y)
       agent.map[mapLocation] = visible.getOrDefault(visibleLocation, @[])
-      # Mark depleted sites to avoid revisits.
-      for f in agent.map[mapLocation]:
-        if f.featureId == agent.cfg.features.remainingUses and f.value == 0:
-          agent.depleted.incl(mapLocation)
       agent.seen.incl(mapLocation)
 
   # agent.cfg.drawMap(agent.map, agent.seen)
@@ -183,16 +177,6 @@ proc getNearbyExtractor*(
       if featureValue.featureId == cfg.features.tag and featureValue.value == tagId:
         let agentsNearby = cfg.getNumAgentsNearby(location, map)
         if agentsNearby > 1:
-          continue
-        var skip = false
-        for f in map[location]:
-          if f.featureId == cfg.features.remainingUses and f.value == 0:
-            skip = true
-            break
-          # if f.featureId == cfg.features.cooldownRemaining and f.value > 50:
-          #   skip = true
-          #   break
-        if skip:
           continue
         let distance = manhattan(location, currentLocation)
         if distance < closestDistance:
@@ -622,7 +606,7 @@ proc step*(
 
       # Check the carbon extractor.
       let extractorNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, extractorTag)
-      if extractorNearby.isSome() and extractorNearby.get() notin agent.unreachable and extractorNearby.get() notin agent.depleted:
+      if extractorNearby.isSome() and extractorNearby.get() notin agent.unreachable:
         measurePush("extractor nearby to take " & name)
         let action = agent.cfg.aStar(agent.location, extractorNearby.get(), agent.map)
         measurePop()
@@ -630,9 +614,6 @@ proc step*(
           doAction(action.get().int32)
           log "going to " & name & ", need: " & $target & " have: " & $inventory
           markPatternReapply(vibe)
-          # If we arrive and see it depleted, mark it.
-          if extractorNearby.get() in agent.depleted:
-            agent.unreachable.incl(extractorNearby.get())
           return true
         else:
           agent.unreachable.incl(extractorNearby.get())

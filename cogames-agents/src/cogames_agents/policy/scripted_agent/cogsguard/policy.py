@@ -446,7 +446,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         }
 
         # Feature name sets for observation parsing
-        self._spatial_feature_names = {"tag", "cooldown_remaining", "clipped", "remaining_uses"}
+        self._spatial_feature_names = {"tag"}
         self._agent_feature_key_by_name = {"agent:group": "agent_group", "agent:frozen": "agent_frozen"}
         self._protocol_input_prefix = "protocol_input:"
         self._protocol_output_prefix = "protocol_output:"
@@ -769,9 +769,8 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         resource_type: Optional[str] = None,
     ) -> None:
         """Update or create a structure in the structures map."""
-        # Derive alignment from clipped field, object name, and structure type
-        clipped = obj_state.clipped > 0
-        alignment = self._derive_alignment(obj_name, clipped, structure_type, obj_state.tags)
+        # Derive alignment from object name, tags, and structure type
+        alignment = self._derive_alignment(obj_name, structure_type, obj_state.tags)
         if pos in s.alignment_overrides:
             override = s.alignment_overrides[pos]
             if alignment is None:
@@ -811,9 +810,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             # Update existing structure
             struct = s.structures[pos]
             struct.last_seen_step = s.step_count
-            struct.cooldown_remaining = obj_state.cooldown_remaining
-            struct.remaining_uses = obj_state.remaining_uses
-            struct.clipped = clipped
             struct.alignment = alignment
             struct.inventory_amount = inventory_amount
         else:
@@ -824,9 +820,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                 name=obj_name,
                 last_seen_step=s.step_count,
                 resource_type=resource_type,
-                cooldown_remaining=obj_state.cooldown_remaining,
-                remaining_uses=obj_state.remaining_uses,
-                clipped=clipped,
                 alignment=alignment,
                 inventory_amount=inventory_amount,
             )
@@ -857,11 +850,10 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
     def _derive_alignment(
         self,
         obj_name: str,
-        clipped: bool,
         structure_type: Optional[StructureType] = None,
         tags: Optional[list[str]] = None,
     ) -> Optional[str]:
-        """Derive alignment from object name, tags, clipped status, and structure type.
+        """Derive alignment from object name, tags, and structure type.
 
         In CoGsGuard:
         - Hub/nexus = cogs-aligned
@@ -878,9 +870,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         if "cogs" in obj_lower or "cogs_" in obj_lower or any("cogs" in tag for tag in tag_lowers):
             return "cogs"
         if "clips" in obj_lower or "clips_" in obj_lower or any("clips" in tag for tag in tag_lowers):
-            return "clips"
-        # Clipped field indicates clips alignment
-        if clipped:
             return "clips"
         # Structure type defaults:
         # - Hub/nexus defaults to cogs (main cogs building)

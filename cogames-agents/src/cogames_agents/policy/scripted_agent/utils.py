@@ -158,9 +158,6 @@ def create_object_state(
     return ObjectState(
         name=obj_name,
         tags=tags,
-        cooldown_remaining=get_int("cooldown_remaining", 0),
-        clipped=get_int("clipped", 0),
-        remaining_uses=get_int("remaining_uses", 999),
         inventory=get_dict("inventory"),
         protocol_inputs=get_dict("protocol_inputs"),
         protocol_outputs=get_dict("protocol_outputs"),

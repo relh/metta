@@ -57,7 +57,6 @@ __device__ void update_special_feature(AgentState* s, int mx, int my,
     SpecialCell* sc = find_special(s, mx, my);
     if (!sc) return;
 
-    if (feat_id == d_cfg.feat_remaining_uses)    { sc->remaining_uses = (int8_t)value; return; }
     if (feat_id == d_cfg.feat_vibe)              { sc->vibe = (int8_t)value; return; }
 
     // Inventory base
@@ -204,7 +203,7 @@ __device__ void parse_observations(
         } else if (feat_id == d_cfg.feat_group) {
             cell->flags |= (1 | 2 | 16);  // has_data + group_present + written_this_step
         } else {
-            // Other features (vibe, remaining_uses, inventory, protocol)
+            // Other features (vibe, inventory, protocol)
             // Route to special cell if one exists at this location
             cell->flags |= 16;  // written_this_step
             update_special_feature(state, mx, my, feat_id, value);

@@ -104,11 +104,6 @@ class ExtractorInfo:
     last_seen_step: int
     times_used: int = 0
 
-    # Extractor state from observations
-    cooldown_remaining: int = 0  # Steps until ready
-    clipped: bool = False  # Is it depleted?
-    remaining_uses: int = 999  # How many uses left
-
 
 @dataclass
 class ObjectState:
@@ -116,11 +111,6 @@ class ObjectState:
 
     name: str
     tags: list[str] = field(default_factory=list)
-
-    # Extractor/station features
-    cooldown_remaining: int = 0
-    clipped: int = 0
-    remaining_uses: int = 999
 
     # Inventory (for chests/extractors - maps resource name to amount)
     inventory: dict[str, int] = field(default_factory=dict)

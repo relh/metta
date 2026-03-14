@@ -152,7 +152,6 @@ void set_config(
     int feat_inv_germanium, int feat_inv_silicon, int feat_inv_heart,
     int feat_inv_decoder, int feat_inv_modulator,
     int feat_inv_resonator, int feat_inv_scrambler,
-    int feat_remaining_uses,
     int feat_inv_carbon_p1, int feat_inv_carbon_p2,
     int feat_inv_oxygen_p1, int feat_inv_oxygen_p2,
     int feat_inv_germanium_p1, int feat_inv_germanium_p2,
@@ -197,7 +196,6 @@ void set_config(
     cfg.feat_inv_heart = feat_inv_heart;
     cfg.feat_inv_decoder = feat_inv_decoder; cfg.feat_inv_modulator = feat_inv_modulator;
     cfg.feat_inv_resonator = feat_inv_resonator; cfg.feat_inv_scrambler = feat_inv_scrambler;
-    cfg.feat_remaining_uses = feat_remaining_uses;
     cfg.feat_inv_carbon_p1 = feat_inv_carbon_p1; cfg.feat_inv_carbon_p2 = feat_inv_carbon_p2;
     cfg.feat_inv_oxygen_p1 = feat_inv_oxygen_p1; cfg.feat_inv_oxygen_p2 = feat_inv_oxygen_p2;
     cfg.feat_inv_germanium_p1 = feat_inv_germanium_p1; cfg.feat_inv_germanium_p2 = feat_inv_germanium_p2;

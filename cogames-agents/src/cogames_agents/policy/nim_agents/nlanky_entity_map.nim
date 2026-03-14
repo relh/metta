@@ -11,8 +11,6 @@ type
   Entity* = object
     kind*: string
     alignment*: Alignment
-    clipped*: int
-    remainingUses*: int
     inventoryAmount*: int # -1 when unknown/not applicable
     lastSeen*: int
 

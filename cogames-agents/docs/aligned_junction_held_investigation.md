@@ -288,8 +288,7 @@ and what would definitively confirm or clear each one. These are ordered by impa
 
 - **Extractor inventory visibility**: `inventory_amount` is derived from `obj_state.inventory`. If extractor inventory
   tokens are absent in observations, the first “empty dict” after discovery marks the extractor as depleted forever.
-  - **Test:** log `obj_state.inventory` for extractors over time; if it is always empty, treat extractors as usable
-    unless `remaining_uses == 0` or `clipped == True`.
+  - **Test:** log `obj_state.inventory` for extractors over time; if it is always empty, treat extractors as usable.
 
 - **Junction/junction alignment inference**: alignment uses `obj_state.clipped` or tag heuristics. If `clipped` is not
   reliable for junctions, junctions can appear neutral or misaligned, breaking align/scramble targeting and safety.

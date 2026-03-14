@@ -152,16 +152,6 @@ proc getNearbyExtractor*(
         let agentsNearby = cfg.getNumAgentsNearby(location, map)
         if agentsNearby > 1:
           continue
-        var skip = false
-        for f in map[location]:
-          if f.featureId == cfg.features.remainingUses and f.value == 0:
-            skip = true
-            break
-          # if f.featureId == cfg.features.cooldownRemaining and f.value > 50:
-          #   skip = true
-          #   break
-        if skip:
-          continue
         let distance = manhattan(location, currentLocation)
         if distance < closestDistance:
           closestDistance = distance

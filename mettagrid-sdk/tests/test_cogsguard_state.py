@@ -166,16 +166,13 @@ def test_cogsguard_state_adapter_preserves_extractor_features(
             make_token(cogsguard_env_info, "agent:group", 0, row=center_row, col=center_col),
             make_token(cogsguard_env_info, "agent_id", 0, row=center_row, col=center_col),
             make_tag_token(cogsguard_env_info, "type:carbon_extractor", row=center_row, col=center_col + 1),
-            make_token(cogsguard_env_info, "remaining_uses", 9, row=center_row, col=center_col + 1),
-            make_token(cogsguard_env_info, "cooldown_remaining", 3, row=center_row, col=center_col + 1),
         ],
     )
 
     state = adapter.build_state(ObservationEnvelope(raw_observation=obs, policy_env_info=cogsguard_env_info, step=4))
 
     extractor = next(entity for entity in state.visible_entities if entity.entity_type == "carbon_extractor")
-    assert extractor.attributes["remaining_uses"] == 9
-    assert extractor.attributes["cooldown_remaining"] == 3
+    assert extractor.entity_type == "carbon_extractor"
 
 
 def test_cogsguard_state_adapter_exposes_freeze_status(

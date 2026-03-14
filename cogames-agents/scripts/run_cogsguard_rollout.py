@@ -261,8 +261,6 @@ def run_rollout(
                         expected_alignment = "cogs"
                     elif any("clips" in tag for tag in obj_tags):
                         expected_alignment = "clips"
-                elif obj_state.clipped > 0:
-                    expected_alignment = "clips"
 
                 struct = state.structures.get(pos)
                 if struct is None or struct.structure_type != StructureType.CHARGER:
@@ -415,8 +413,8 @@ def run_rollout(
     print(f"- steps: {steps}")
     print(f"- hub seen: {hub_seen}")
     print(f"- hub missing in structures: {hub_missing}")
-    print(f"- tagged/clipped junctions checked: {junction_alignment_checks}")
-    print(f"- tagged/clipped junction mismatches: {junction_alignment_mismatches}")
+    print(f"- tagged junctions checked: {junction_alignment_checks}")
+    print(f"- tagged junction mismatches: {junction_alignment_mismatches}")
     print(f"- neutral junctions checked: {neutral_junction_checks}")
     print(f"- neutral junctions flagged as clips: {neutral_junction_mismatches}")
     print(f"- observed roles: {sorted(observed_roles)}")

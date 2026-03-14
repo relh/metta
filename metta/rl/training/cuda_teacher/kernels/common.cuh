@@ -38,7 +38,6 @@ struct CellCompact {
 
 struct SpecialCell {
     int16_t mx, my;             // map coordinates
-    int8_t remaining_uses;      // -1 if absent
     int8_t vibe;                // -1 if absent
     // Inventory (for chests)
     uint8_t inv_carbon, inv_oxygen, inv_germanium, inv_silicon, inv_heart;
@@ -116,7 +115,6 @@ struct EnvConfig {
     int16_t feat_inv_energy, feat_inv_carbon, feat_inv_oxygen;
     int16_t feat_inv_germanium, feat_inv_silicon, feat_inv_heart;
     int16_t feat_inv_decoder, feat_inv_modulator, feat_inv_resonator, feat_inv_scrambler;
-    int16_t feat_remaining_uses;
     // Power features
     int16_t feat_inv_carbon_p1, feat_inv_carbon_p2;
     int16_t feat_inv_oxygen_p1, feat_inv_oxygen_p2;
@@ -249,7 +247,6 @@ __device__ SpecialCell* upsert_special(AgentState* s, int mx, int my) {
     *sc = {};
     sc->mx = mx;
     sc->my = my;
-    sc->remaining_uses = -1;
     sc->vibe = -1;
     return sc;
 }

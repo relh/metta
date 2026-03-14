@@ -322,12 +322,11 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             total_extractors = len(all_extractors)
             total_usable = len(usable_extractors)
             if total_extractors > 0 and DEBUG:
-                # Log why extractors are not usable (empty, clipped, etc.)
+                # Log why extractors are not usable (empty, etc.)
                 empty_count = sum(1 for e in all_extractors if e.inventory_amount <= 0)
-                clipped_count = sum(1 for e in all_extractors if e.clipped)
                 print(
                     f"[A{s.agent_id}] GATHER: {total_extractors} extractors known, "
-                    f"{total_usable} usable (empty={empty_count}, clipped={clipped_count}), "
+                    f"{total_usable} usable (empty={empty_count}), "
                     f"exploring for more"
                 )
             return self._explore_for_extractors(s)
@@ -359,10 +358,6 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 reason = []
                 if current_extractor.inventory_amount <= 0:
                     reason.append(f"empty(inv={current_extractor.inventory_amount})")
-                if current_extractor.clipped:
-                    reason.append("clipped")
-                if current_extractor.remaining_uses <= 0:
-                    reason.append(f"depleted(uses={current_extractor.remaining_uses})")
                 print(
                     f"[A{s.agent_id}] GATHER: Extractor at {extractor.position} not usable: "
                     f"{', '.join(reason) if reason else 'unknown'}. Switching."
@@ -391,17 +386,6 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     print(f"[A{s.agent_id}] GATHER: Switching to extractor at {other.position}")
                 return self._move_towards(s, other.position, reach_adjacent=True)
             # Wait a bit - other agent should move soon
-            return self._noop()
-
-        # At extractor - check cooldown
-        if current_extractor.cooldown_remaining > 0:
-            if DEBUG and s.step_count <= 50:
-                print(f"[A{s.agent_id}] GATHER: Extractor on cooldown={current_extractor.cooldown_remaining}")
-            # Try another extractor while this one cools down
-            other = s.get_nearest_usable_extractor(exclude=extractor.position)
-            if other is not None and other.cooldown_remaining == 0:
-                return self._move_towards(s, other.position, reach_adjacent=True)
-            # Wait for cooldown - noop
             return self._noop()
 
         # Start tracking this mine attempt

@@ -46,7 +46,6 @@ type
     stations: Table[string, Location]
     depots: Table[Location, int] # -1 clips, 0 neutral/unknown, 1 cogs
     extractors: Table[string, seq[Location]]
-    extractorRemaining: Table[Location, int]
     hub: Option[Location]
     chest: Option[Location]
     actionIds: Table[string, int]
@@ -82,12 +81,10 @@ proc getTagNames(cfg: Config, features: seq[FeatureValue]): HashSet[string] =
       if feature.value >= 0 and feature.value < cfg.config.tags.len:
         result.incl(cfg.config.tags[feature.value])
 
-proc getAlignment(tagNames: HashSet[string], clipped: int, aoeMask: int): int =
+proc getAlignment(tagNames: HashSet[string], aoeMask: int): int =
   if "team:cogs" in tagNames:
     return 1
   if "team:clips" in tagNames:
-    return -1
-  if clipped > 0:
     return -1
   if aoeMask == 1:
     return 1
@@ -110,9 +107,8 @@ proc updateDiscoveries(agent: CogsguardAlignAllAgent, visible: Table[Location, s
       continue
 
     let absoluteLoc = Location(x: location.x + agent.location.x, y: location.y + agent.location.y)
-    let clipped = featureValueAt(features, agent.cfg.features.clipped)
     let aoeMask = featureValueAt(features, agent.cfg.features.aoeMask)
-    let alignment = getAlignment(tagNames, clipped, aoeMask)
+    let alignment = getAlignment(tagNames, aoeMask)
 
     for tagName in tagNames.items:
       for stationName in StationTags.items:
@@ -133,10 +129,6 @@ proc updateDiscoveries(agent: CogsguardAlignAllAgent, visible: Table[Location, s
             if absoluteLoc notin locations:
               locations.add(absoluteLoc)
             agent.extractors[resource] = locations
-
-            let remaining = featureValueAt(features, agent.cfg.features.remainingUses)
-            if remaining != -1:
-              agent.extractorRemaining[absoluteLoc] = remaining
 
 proc updateMap(agent: CogsguardAlignAllAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
   # Use lp:* (local position) observations as the authoritative position signal.
@@ -254,9 +246,7 @@ proc doGather(agent: CogsguardAlignAllAgent): int =
   var candidates: seq[Location] = @[]
   for resource in ResourceNames:
     for loc in agent.extractors.getOrDefault(resource, @[]):
-      let remaining = agent.extractorRemaining.getOrDefault(loc, 1)
-      if remaining != 0:
-        candidates.add(loc)
+      candidates.add(loc)
 
   if candidates.len == 0:
     return agent.explore()
@@ -481,7 +471,6 @@ proc newCogsguardAlignAllAgent*(agentId: int, environmentConfig: string): Cogsgu
   result.stations = initTable[string, Location]()
   result.depots = initTable[Location, int]()
   result.extractors = initTable[string, seq[Location]]()
-  result.extractorRemaining = initTable[Location, int]()
   result.hub = none(Location)
   result.chest = none(Location)
   result.actionIds = initTable[string, int]()

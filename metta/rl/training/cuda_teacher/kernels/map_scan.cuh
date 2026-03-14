@@ -37,8 +37,7 @@ __device__ bool get_nearby(
 
 // ---------------------------------------------------------------------------
 // getNearbyExtractor: like getNearby but filters by:
-//   1. remaining_uses != 0 (skip depleted)
-//   2. agent count in 8-neighborhood <= 1 (avoid crowding)
+//   1. agent count in 8-neighborhood <= 1 (avoid crowding)
 // ---------------------------------------------------------------------------
 
 __device__ bool get_nearby_extractor(
@@ -56,10 +55,6 @@ __device__ bool get_nearby_extractor(
             const CellCompact* cell = &s->map[my][mx];
             if (!(cell->flags & 1)) continue;
             if (cell->tag != tag_id) continue;
-
-            // Check remaining_uses in special cell buffer
-            const SpecialCell* sc = find_special(s, mx, my);
-            if (sc && sc->remaining_uses == 0) continue;
 
             // Check agent crowding in 8-neighborhood
             if (count_agents_nearby_8(s, mx, my) > 1) continue;

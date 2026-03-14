@@ -56,27 +56,18 @@ class StructureInfo:
 
     # Extractor-specific attributes
     resource_type: Optional[str] = None  # carbon, oxygen, germanium, silicon
-    remaining_uses: int = 999
-    cooldown_remaining: int = 0
-    clipped: bool = False  # True if owned by clips
     inventory_amount: int = 999  # Current resource amount in extractor inventory
 
     def is_usable_extractor(self) -> bool:
-        """Check if this is a usable extractor (not depleted, not clipped, has resources).
+        """Check if this is a usable extractor with resources.
 
         An extractor is usable if:
         - It's an extractor structure type
-        - It has remaining uses (not permanently depleted)
         - It has resources to extract (inventory_amount > 0)
-        - It's not owned by clips (clipped)
         """
         if self.structure_type != StructureType.EXTRACTOR:
             return False
-        if self.remaining_uses <= 0:
-            return False
         if self.inventory_amount <= 0:
-            return False
-        if self.clipped:
             return False
         return True
 
@@ -268,7 +259,7 @@ class CogsguardAgentState:
         return best
 
     def get_usable_extractors(self) -> list[StructureInfo]:
-        """Get all usable extractors (not depleted, not clipped)."""
+        """Get all usable extractors."""
         return [s for s in self.structures.values() if s.is_usable_extractor()]
 
     def get_nearest_usable_extractor(self, exclude: Optional[tuple[int, int]] = None) -> Optional[StructureInfo]:

@@ -31,7 +31,6 @@ def select_primary_tag(tags: list[str], *, priority_objects: Optional[set[str]] 
 
 def derive_alignment_from_tags(
     obj_name: str,
-    clipped: int,
     tags: list[str],
 ) -> Optional[str]:
     for tag in tags:
@@ -42,6 +41,6 @@ def derive_alignment_from_tags(
 
     if "c:" in obj_name:
         return "cogs"
-    if "clips" in obj_name or clipped > 0:
+    if "clips" in obj_name:
         return "clips"
     return None

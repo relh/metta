@@ -441,8 +441,6 @@ method execute*(g: PickResourceGoal, ctx: var NlankyContext): Option[NavAction] 
   for r in ResourceTypes:
     var usable = false
     for (pos, e) in ctx.map.find(kind=r & "_extractor"):
-      if e.remainingUses <= 0:
-        continue
       if e.inventoryAmount == 0:
         continue
       if extractorRecentlyFailed(ctx, pos):
@@ -580,8 +578,6 @@ proc findExtractor(ctx: NlankyContext, resource: string): Option[Location] =
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
   for (pos, e) in ctx.map.find(kind=resource & "_extractor"):
-    if e.remainingUses <= 0:
-      continue
     if e.inventoryAmount == 0:
       continue
     if extractorRecentlyFailed(ctx, pos):
@@ -768,7 +764,7 @@ method execute*(g: EmergencyMineGoal, ctx: var NlankyContext): Option[NavAction]
   var target: Option[Location] = none(Location)
   var bestDist = high(int)
   for (pos, e) in ctx.map.find(kind=lowest & "_extractor"):
-    if e.remainingUses <= 0 or e.inventoryAmount == 0 or extractorRecentlyFailed(ctx, pos):
+    if e.inventoryAmount == 0 or extractorRecentlyFailed(ctx, pos):
       continue
     let d = manhattan(ctx.state.position, pos)
     if d < bestDist:
@@ -778,7 +774,7 @@ method execute*(g: EmergencyMineGoal, ctx: var NlankyContext): Option[NavAction]
   if target.isNone:
     for r in ResourceTypes:
       for (pos, e) in ctx.map.find(kind=r & "_extractor"):
-        if e.remainingUses <= 0 or e.inventoryAmount == 0 or extractorRecentlyFailed(ctx, pos):
+        if e.inventoryAmount == 0 or extractorRecentlyFailed(ctx, pos):
           continue
         let d = manhattan(ctx.state.position, pos)
         if d < bestDist:
@@ -825,7 +821,7 @@ method execute*(g: FallbackMineGoal, ctx: var NlankyContext): Option[NavAction] 
   var best: Option[Location] = none(Location)
   for r in ResourceTypes:
     for (pos, e) in ctx.map.find(kind=r & "_extractor"):
-      if e.remainingUses <= 0 or e.inventoryAmount == 0 or extractorRecentlyFailed(ctx, pos):
+      if e.inventoryAmount == 0 or extractorRecentlyFailed(ctx, pos):
         continue
       let d = manhattan(ctx.state.position, pos)
       if d < bestDist:

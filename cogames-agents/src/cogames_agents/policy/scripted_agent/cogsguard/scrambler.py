@@ -235,14 +235,14 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         if DEBUG and s.step_count % 20 == 1:
             print(f"[A{s.agent_id}] FIND_TARGET: {len(junctions)} junctions in structures map")
             for ch in junctions:
-                print(f"  - {ch.position}: alignment={ch.alignment}, clipped={ch.clipped}")
+                print(f"  - {ch.position}: alignment={ch.alignment}")
 
         for junction in junctions:
             pos = junction.position
             dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
 
             if DEBUG and s.step_count % 20 == 1:
-                print(f"  LOOP junction@{pos}: alignment='{junction.alignment}' clipped={junction.clipped} dist={dist}")
+                print(f"  LOOP junction@{pos}: alignment='{junction.alignment}' dist={dist}")
 
             # Skip recently worked junctions (only if actually worked before)
             last_worked = s.worked_junctions.get(pos, 0)
@@ -258,7 +258,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 continue
 
             # Check alignment - prioritize clips (enemy) junctions
-            if junction.alignment == "clips" or junction.clipped:
+            if junction.alignment == "clips":
                 if DEBUG and s.step_count % 20 == 1:
                     print("    ADD to enemy_junctions")
                 enemy_junctions.append((dist, pos))

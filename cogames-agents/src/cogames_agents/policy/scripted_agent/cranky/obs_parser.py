@@ -161,8 +161,6 @@ class ObsParser:
             feature_name = tok.feature.name
             if feature_name == "tag":
                 position_features[world_pos]["tags"].append(tok.value)
-            elif feature_name in ("cooldown_remaining", "clipped", "remaining_uses"):
-                position_features[world_pos]["props"][feature_name] = tok.value
             elif feature_name.startswith("inv:"):
                 inv_dict = position_features[world_pos].setdefault("inventory", {})
                 token_value_base = max(int(tok.feature.normalization), 1)
@@ -182,13 +180,9 @@ class ObsParser:
             inv_data = features.get("inventory")
 
             resolved_tags = [self._tag_names.get(tid, "") for tid in tags]
-            alignment = self._derive_alignment(obj_name, props.get("clipped", 0), resolved_tags)
+            alignment = self._derive_alignment(obj_name, resolved_tags)
             if alignment:
                 props["alignment"] = alignment
-
-            # Remaining uses
-            if "remaining_uses" not in props:
-                props["remaining_uses"] = 999
 
             # Inventory amount for extractors
             if inv_data:
@@ -225,7 +219,7 @@ class ObsParser:
             return self._vibe_names[vibe_id]
         return "default"
 
-    def _derive_alignment(self, obj_name: str, clipped: int, tags: list[str]) -> str | None:
+    def _derive_alignment(self, obj_name: str, tags: list[str]) -> str | None:
         for tag in tags:
             if tag in ("team:cogs", "net:cogs"):
                 return "cogs"
@@ -233,7 +227,7 @@ class ObsParser:
                 return "clips"
         if "c:" in obj_name:
             return "cogs"
-        if "clips" in obj_name or clipped > 0:
+        if "clips" in obj_name:
             return "clips"
         return None
 

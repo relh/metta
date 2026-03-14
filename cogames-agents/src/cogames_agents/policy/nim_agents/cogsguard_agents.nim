@@ -46,7 +46,6 @@ type
 
     stations: Table[string, Location]
     extractors: Table[string, seq[Location]]
-    extractorRemaining: Table[Location, int]
     depots: Table[Location, int] # -1 clips, 0 neutral/unknown, 1 cogs
     hub: Option[Location]
     chest: Option[Location]
@@ -218,10 +217,6 @@ proc updateDiscoveries(agent: CogsguardAgent, visible: Table[Location, seq[Featu
               locations.add(absoluteLoc)
             agent.extractors[resource] = locations
 
-            let remaining = featureValueAt(features, agent.cfg.features.remainingUses)
-            if remaining != -1:
-              agent.extractorRemaining[absoluteLoc] = remaining
-
 proc updateMap(agent: CogsguardAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
   # Use lp:* (local position) observations as the authoritative position signal.
   let offset = agent.cfg.getLocalPositionOffset(visible)
@@ -345,8 +340,6 @@ proc doGather(agent: CogsguardAgent): int =
   var candidates: seq[Location] = @[]
   for resource in ResourceNames:
     for loc in agent.extractors.getOrDefault(resource, @[]):
-      # Remaining-uses semantics differ across environments; treat discovered extractors
-      # as viable targets regardless of remaining_uses.
       candidates.add(loc)
 
   if candidates.len == 0:
@@ -509,7 +502,6 @@ proc newCogsguardAgent*(agentId: int, environmentConfig: string): CogsguardAgent
   result.exploreSteps = 0
   result.stations = initTable[string, Location]()
   result.extractors = initTable[string, seq[Location]]()
-  result.extractorRemaining = initTable[Location, int]()
   result.depots = initTable[Location, int]()
   result.hub = none(Location)
   result.chest = none(Location)

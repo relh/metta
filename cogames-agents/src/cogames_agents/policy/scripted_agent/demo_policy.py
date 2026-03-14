@@ -126,7 +126,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         return min(items, key=lambda p: manhattan((s.row, s.col), p)) if items else None
 
     def _rtype(self, name):
-        name = name.lower().replace("clipped_", "")
+        name = name.lower()
         if "_extractor" not in name:
             return None
         name = name.replace("_extractor", "")
@@ -145,7 +145,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             obs,
             obs_hr=self._obs_hr,
             obs_wr=self._obs_wr,
-            spatial_feature_names={"tag", "cooldown_remaining", "clipped", "remaining_uses"},
+            spatial_feature_names={"tag"},
             agent_feature_key_by_name={"agent:group": "agent_group", "agent:frozen": "agent_frozen"},
             protocol_input_prefix="protocol_input:",
             protocol_output_prefix="protocol_output:",

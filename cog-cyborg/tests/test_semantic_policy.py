@@ -338,13 +338,13 @@ def test_semantic_policy_uses_directive_target_entity_for_miner_choice(cogsguard
                 entity_id="carbon_extractor@0,-2",
                 entity_type="carbon_extractor",
                 position=GridPosition(x=0, y=-2),
-                attributes={"global_x": 0, "global_y": -2, "remaining_uses": 7},
+                attributes={"global_x": 0, "global_y": -2},
             ),
             SemanticEntity(
                 entity_id="carbon_extractor@5,0",
                 entity_type="carbon_extractor",
                 position=GridPosition(x=5, y=0),
-                attributes={"global_x": 5, "global_y": 0, "remaining_uses": 7},
+                attributes={"global_x": 5, "global_y": 0},
                 labels=["east_lane"],
             ),
         ],
@@ -590,13 +590,13 @@ def test_miners_keep_sticky_extractor_target_until_a_materially_better_one_exist
                 entity_id="germanium_extractor@5,0",
                 entity_type="germanium_extractor",
                 position=GridPosition(x=5, y=0),
-                attributes={"global_x": 5, "global_y": 0, "remaining_uses": 7},
+                attributes={"global_x": 5, "global_y": 0},
             ),
             SemanticEntity(
                 entity_id="germanium_extractor@6,0",
                 entity_type="germanium_extractor",
                 position=GridPosition(x=6, y=0),
-                attributes={"global_x": 6, "global_y": 0, "remaining_uses": 7},
+                attributes={"global_x": 6, "global_y": 0},
             ),
         ],
         team_summary=TeamSummary(
@@ -613,48 +613,6 @@ def test_miners_keep_sticky_extractor_target_until_a_materially_better_one_exist
     assert summary == "mine_germanium"
     assert action.name == "move_east"
     assert agent._current_target_position == (6, 0)
-
-
-def test_miner_ignores_depleted_extractors(cogsguard_env_info) -> None:
-    world_model = SharedWorldModel()
-    agent = MettagridSemanticPolicy(cogsguard_env_info).agent_policy(0)
-    agent._world_model = world_model
-    state = MettagridState(
-        game="cogsguard",
-        step=250,
-        self_state=SelfState(
-            entity_id="agent-0",
-            entity_type="agent",
-            position=GridPosition(x=0, y=0),
-            attributes={"global_x": 0, "global_y": 0, "team": "cogs"},
-            inventory={"miner": 1, "hp": 100},
-        ),
-        visible_entities=[
-            SemanticEntity(
-                entity_id="carbon_extractor@2,0",
-                entity_type="carbon_extractor",
-                position=GridPosition(x=2, y=0),
-                attributes={"global_x": 2, "global_y": 0, "remaining_uses": 0},
-            ),
-            SemanticEntity(
-                entity_id="carbon_extractor@5,0",
-                entity_type="carbon_extractor",
-                position=GridPosition(x=5, y=0),
-                attributes={"global_x": 5, "global_y": 0, "remaining_uses": 7},
-            ),
-        ],
-        team_summary=TeamSummary(
-            team_id="cogs",
-            shared_inventory={"carbon": 0, "oxygen": 20, "germanium": 20, "silicon": 20},
-        ),
-    )
-    world_model.update(state)
-
-    action, summary = agent._miner_action(state)
-
-    assert summary == "mine_carbon"
-    assert action.name == "move_east"
-    assert agent._current_target_position == (5, 0)
 
 
 def test_miner_ignores_stale_extractors(cogsguard_env_info) -> None:
@@ -676,7 +634,7 @@ def test_miner_ignores_stale_extractors(cogsguard_env_info) -> None:
                 entity_id="carbon_extractor@2,0",
                 entity_type="carbon_extractor",
                 position=GridPosition(x=2, y=0),
-                attributes={"global_x": 2, "global_y": 0, "remaining_uses": 7},
+                attributes={"global_x": 2, "global_y": 0},
             ),
         ],
         team_summary=TeamSummary(
@@ -716,7 +674,7 @@ def test_miner_resets_remembered_extractor_targets_when_stalled_at_hub(cogsguard
                 entity_id="germanium_extractor@6,0",
                 entity_type="germanium_extractor",
                 position=GridPosition(x=6, y=0),
-                attributes={"global_x": 6, "global_y": 0, "remaining_uses": 8},
+                attributes={"global_x": 6, "global_y": 0},
             ),
         ],
         team_summary=TeamSummary(team_id="cogs"),
@@ -779,7 +737,7 @@ def test_aligner_rebuilds_heart_supply_when_team_cannot_refill(cogsguard_env_inf
                 entity_id="carbon_extractor@5,0",
                 entity_type="carbon_extractor",
                 position=GridPosition(x=5, y=0),
-                attributes={"global_x": 5, "global_y": 0, "remaining_uses": 8},
+                attributes={"global_x": 5, "global_y": 0},
             ),
         ],
         team_summary=TeamSummary(
@@ -821,7 +779,7 @@ def test_scrambler_rebuilds_heart_supply_when_team_cannot_refill(cogsguard_env_i
                 entity_id="oxygen_extractor@5,0",
                 entity_type="oxygen_extractor",
                 position=GridPosition(x=5, y=0),
-                attributes={"global_x": 5, "global_y": 0, "remaining_uses": 8},
+                attributes={"global_x": 5, "global_y": 0},
             ),
         ],
         team_summary=TeamSummary(
@@ -863,7 +821,7 @@ def test_unaffordable_gearless_miner_falls_back_to_mining(cogsguard_env_info) ->
                 entity_id="carbon_extractor@5,0",
                 entity_type="carbon_extractor",
                 position=GridPosition(x=5, y=0),
-                attributes={"global_x": 5, "global_y": 0, "remaining_uses": 8},
+                attributes={"global_x": 5, "global_y": 0},
             ),
         ],
         team_summary=TeamSummary(

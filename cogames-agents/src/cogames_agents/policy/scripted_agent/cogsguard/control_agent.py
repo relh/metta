@@ -226,7 +226,7 @@ class CommanderScramblerAgentPolicyImpl(ScramblerAgentPolicyImpl):
             if junction.alignment == "cogs":
                 continue
 
-            if junction.alignment == "clips" or junction.clipped:
+            if junction.alignment == "clips":
                 enemy_junctions.append((dist, pos))
             elif junction.alignment is None or junction.alignment == "neutral":
                 neutral_junctions.append((dist, pos))
@@ -268,7 +268,7 @@ class CommanderAlignerAgentPolicyImpl(AlignerAgentPolicyImpl):
 
             if junction.alignment is None or junction.alignment == "neutral":
                 neutral_junctions.append((dist, pos))
-            elif junction.alignment == "clips" or junction.clipped:
+            elif junction.alignment == "clips":
                 clips_junctions.append((dist, pos))
             else:
                 other_junctions.append((dist, pos))

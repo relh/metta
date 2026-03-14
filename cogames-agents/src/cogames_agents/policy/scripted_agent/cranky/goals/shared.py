@@ -104,8 +104,6 @@ class FallbackMineGoal(Goal):
         best: tuple[int, tuple[int, int]] | None = None
         for resource in RESOURCE_TYPES:
             for pos, e in ctx.map.find(type=f"{resource}_extractor"):
-                if e.properties.get("remaining_uses", 999) <= 0:
-                    continue
                 if e.properties.get("inventory_amount", -1) == 0:
                     continue
                 if _extractor_recently_failed(ctx, pos):

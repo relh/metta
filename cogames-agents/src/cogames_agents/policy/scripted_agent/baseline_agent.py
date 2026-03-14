@@ -85,9 +85,6 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         # Fast lookup tables for observation feature decoding
         self._spatial_feature_names = {
             "tag",
-            "cooldown_remaining",
-            "clipped",
-            "remaining_uses",
         }
         agent_feature_pairs = {
             "agent:group": "agent_group",
@@ -325,7 +322,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
                 # Extractors are also obstacles
                 if "extractor" in obj_name:
                     s.occupancy[r][c] = CellType.OBSTACLE.value
-                    resource_type = obj_name.replace("_extractor", "").replace("clipped_", "")
+                    resource_type = obj_name.replace("_extractor", "")
                     if resource_type:
                         self._discover_extractor(s, pos, resource_type, obj_state)
 
@@ -356,9 +353,6 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             s.extractors[resource_type].append(extractor)
 
         extractor.last_seen_step = s.step_count
-        extractor.cooldown_remaining = obj_state.cooldown_remaining
-        extractor.clipped = obj_state.clipped > 0
-        extractor.remaining_uses = obj_state.remaining_uses
 
     def _update_phase(self, s: SimpleAgentState) -> None:
         """
@@ -663,11 +657,8 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             self._clear_waiting_state(s)
             return None  # Continue with next resource
 
-        # Look up the extractor we're waiting for
-        extractor = self._find_extractor_at_position(s, s.waiting_at_extractor)
-
-        # Calculate timeout based on observed cooldown
-        max_wait = extractor.cooldown_remaining + 5 if extractor else 20
+        # Use a fixed timeout for extractor activation
+        max_wait = 20
 
         s.wait_steps += 1
         if s.wait_steps > max_wait:
@@ -699,17 +690,6 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
 
     def _use_extractor_if_ready(self, s: SimpleAgentState, extractor: ExtractorInfo, resource_type: str) -> Action:
         """Try to use extractor if ready. Returns appropriate action."""
-
-        # Wait if on cooldown
-        if extractor.cooldown_remaining > 0:
-            s.waiting_at_extractor = extractor.position
-            s.wait_steps += 1
-            return Action(name="noop")
-
-        # Skip if depleted/clipped
-        if extractor.remaining_uses == 0 or extractor.clipped:
-            self._clear_waiting_state(s)
-            return Action(name="noop")
 
         # Use it! Track pre-use inventory and activate
         old_amount = getattr(s, resource_type, 0)
@@ -837,8 +817,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         if not extractors:
             return None
 
-        # Filter out clipped or depleted extractors
-        available = [e for e in extractors if not e.clipped and e.remaining_uses > 0]
+        available = extractors
 
         if not available:
             return None

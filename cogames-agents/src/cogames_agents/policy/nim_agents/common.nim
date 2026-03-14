@@ -115,9 +115,6 @@ type
     vibe*: int
     compass*: int
     tag*: int
-    cooldownRemaining*: int
-    clipped*: int
-    remainingUses*: int
     lpEast*: int
     lpWest*: int
     lpNorth*: int
@@ -637,12 +634,6 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.compass = feature.id
       of "tag":
         result.features.tag = feature.id
-      of "cooldown_remaining":
-        result.features.cooldownRemaining = feature.id
-      of "clipped":
-        result.features.clipped = feature.id
-      of "remaining_uses":
-        result.features.remainingUses = feature.id
       of "lp:east":
         result.features.lpEast = feature.id
       of "lp:west":

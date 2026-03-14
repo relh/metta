@@ -158,7 +158,6 @@ class CudaThinkyPolicy:
             _get_feat(feat, "inv:modulator"),
             _get_feat(feat, "inv:resonator"),
             _get_feat(feat, "inv:scrambler"),
-            _get_feat(feat, "remaining_uses"),
             _get_feat(feat, "inv:carbon:p1"),
             _get_feat(feat, "inv:carbon:p2"),
             _get_feat(feat, "inv:oxygen:p1"),

@@ -1593,9 +1593,6 @@ def _is_claimed_by_other(
 
 
 def _is_usable_recent_extractor(entity: KnownEntity, *, step: int) -> bool:
-    remaining_uses = int(entity.attributes.get("remaining_uses", 1))
-    if remaining_uses <= 0:
-        return False
     return step - entity.last_seen_step <= _EXTRACTOR_MEMORY_STEPS
 
 
