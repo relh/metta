@@ -338,24 +338,8 @@ uv run cogames play --mission evals.energy_starved -p baseline --cogs 2
 ### Test UnclippingAgent
 
 ```bash
-# Silicon unclipping (57.7% success)
-uv run cogames play --mission evals.energy_starved -p ladybug --cogs 1 --difficulty clipped_silicon
-
-# Oxygen unclipping (50% success)
-uv run cogames play --mission evals.energy_starved -p ladybug --cogs 2 --difficulty clipped_oxygen
-
 # Multi-agent optimal (45% success, 4 agents)
 uv run cogames play --mission evals.energy_starved -p ladybug --cogs 4
-```
-
-### Debug Carbon Unclipping Failure
-
-```bash
-# Carbon unclipping (0% success - BROKEN!)
-uv run cogames play --mission evals.energy_starved -p ladybug --cogs 1 --difficulty clipped_carbon --steps 2000
-
-# Germanium unclipping (2% success - BROKEN!)
-uv run cogames play --mission evals.energy_starved -p ladybug --cogs 1 --difficulty clipped_germanium --steps 2000
 ```
 
 ---

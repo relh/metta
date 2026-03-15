@@ -18,7 +18,7 @@ uv run pytest tests/vibeservatory/backend/cogames_diagnose/test_router.py -q
 
 ```bash
 uv run cogames diagnose class=random \
-  --mission-set cogsguard_evals \
+  --mission-set cvc_evals \
   --experiments eval_balanced_spread \
   --experiments eval_collect_resources \
   --experiments eval_divide_and_conquer \
@@ -42,7 +42,7 @@ uv run cogames diagnose class=random \
 
 ```bash
 uv run cogames diagnose class=random \
-  --mission-set cogsguard_evals \
+  --mission-set cvc_evals \
   --output-dir outputs/cogames-diagnose/full-20260224
 ```
 
@@ -50,7 +50,7 @@ uv run cogames diagnose class=random \
 
 ```bash
 uv run cogames diagnose class=random \
-  --mission-set cogsguard_evals \
+  --mission-set cvc_evals \
   --experiments eval_balanced_spread \
   --experiments eval_collect_resources \
   --experiments eval_divide_and_conquer \
@@ -63,7 +63,7 @@ uv run cogames diagnose class=random \
 
 ```bash
 uv run cogames diagnose class=random \
-  --mission-set cogsguard_evals \
+  --mission-set cvc_evals \
   --output-dir outputs/cogames-diagnose/full-contract-check-20260224
 ```
 

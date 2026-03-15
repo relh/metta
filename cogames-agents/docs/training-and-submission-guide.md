@@ -62,8 +62,8 @@ uv run cogames run -m cogsguard_arena.basic \
   -p ./train_dir/my_run:v5,proportion=3 \
   -p class=random,proportion=5
 
-# Evaluate on predefined mission sets
-uv run cogames run -S integrated_evals -p ./train_dir/my_run:v5
+# Evaluate on the current integrated eval mission
+uv run cogames run -m energy_starved -p ./train_dir/my_run:v5
 ```
 
 ### Evaluate via Recipe Runner (Advanced)
@@ -492,7 +492,7 @@ python tools/run.py recipes.experiment.cogsguard.train \
 
 # 4. Evaluate the checkpoint
 uv run cogames scrimmage -m cogsguard_arena.basic -p ./train_dir/my-run -e 50
-uv run cogames run -S integrated_evals -p ./train_dir/my-run
+uv run cogames run -m energy_starved -p ./train_dir/my-run
 
 # 5. Upload and submit
 uv run cogames upload -p ./train_dir/my-run -n my-policy

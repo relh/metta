@@ -18,7 +18,7 @@ from mettagrid.policy.policy import PolicySpec
 
 def test_analyze_cogsguard_policy_returns_live_checkpoints() -> None:
     report = analyze_cogsguard_policy(
-        mission_name="cogsguard_machina_1.basic",
+        mission_name="machina_1",
         policy_spec=PolicySpec(class_path="cog_cyborg.policy.semantic_cog.MettagridSemanticPolicy"),
         cogs=8,
         steps=40,
@@ -36,7 +36,7 @@ def test_analyze_cogsguard_policy_returns_live_checkpoints() -> None:
 def test_derive_cogsguard_insights_flags_economy_then_control_gap() -> None:
     report = TrajectoryReport(
         policy_name="test",
-        mission_name="cogsguard_machina_1.basic",
+        mission_name="machina_1",
         seed=42,
         steps=1000,
         avg_reward_per_agent=4.0,
@@ -140,7 +140,7 @@ def test_aligner_target_overlap_counts_duplicate_intents() -> None:
 def test_derive_cogsguard_insights_flags_target_churn() -> None:
     report = TrajectoryReport(
         policy_name="test",
-        mission_name="cogsguard_machina_1.basic",
+        mission_name="machina_1",
         seed=42,
         steps=1000,
         avg_reward_per_agent=5.0,
@@ -197,7 +197,7 @@ def test_derive_cogsguard_insights_flags_target_churn() -> None:
 def test_derive_cogsguard_insights_flags_role_flapping() -> None:
     report = TrajectoryReport(
         policy_name="test",
-        mission_name="cogsguard_machina_1.basic",
+        mission_name="machina_1",
         seed=42,
         steps=1000,
         avg_reward_per_agent=5.0,
@@ -246,7 +246,7 @@ def test_derive_cogsguard_insights_flags_role_flapping() -> None:
 def test_derive_cogsguard_insights_flags_supply_blocked_regear_and_payload_loss() -> None:
     report = TrajectoryReport(
         policy_name="test",
-        mission_name="cogsguard_machina_1.basic",
+        mission_name="machina_1",
         seed=42,
         steps=10_000,
         avg_reward_per_agent=6.0,

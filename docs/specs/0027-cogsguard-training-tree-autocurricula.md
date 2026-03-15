@@ -27,7 +27,7 @@ Dashboard follow-up requested for this branch:
   - eval-centric evidence in one tab
   - training-curriculum-exists-and-works in another tab
 
-## Migration Update (2026-02-19)
+## Integration Update (2026-02-19)
 
 Branch integration context:
 
@@ -38,7 +38,7 @@ Branch integration context:
   - secret name default: `observatory/dashboard/readonly-db-uri`
   - intent: dashboard reads from read-replica endpoint with non-writer credentials
 
-Compatibility work added in `richard-shards`:
+Work added in `richard-shards`:
 
 - Keep Observatory as a pointer to standalone dashboard per policy version.
 - Port tree UI concepts into standalone frontend:
@@ -99,7 +99,7 @@ Implement a versioned `training_tree` system with:
 
 - Replacing all current diagnose logic in one step.
 - Solving full meta-game strategy in the first tree version.
-- Reworking all historical eval suites; we will map/alias incrementally.
+- Reworking every eval suite in the first tree version.
 
 ## Current-State Audit
 
@@ -119,7 +119,7 @@ Implement a versioned `training_tree` system with:
 
 - `recipes/experiment/cogsguard.py` provides dedicated `miner`, `aligner`, and `scout` training helpers, but no explicit
   scrambler helper and no join curricula abstraction.
-- `packages/cogames/src/cogames/games/cogs_vs_clips/evals/cogsguard_evals.py` has broad environment eval maps;
+- `packages/cogames/src/cogames/games/cogs_vs_clips/evals/cvc_evals.py` has broad environment eval maps;
   `diagnostic_evals.py` has focused diagnostics; `spanning_evals.py` has stress variants.
 - Existing eval suites are useful primitives but not organized as atomic-vs-join tree nodes.
 
@@ -334,11 +334,11 @@ UI capabilities:
   - run one policy through leaf + join evals
   - verify readiness appears in Observatory
 
-### 10. Migration and Compatibility
+### 10. Rollout
 
 - Keep existing `cogames diagnose` axis outputs during rollout.
 - Introduce tree artifacts as additive (`training_tree.json`, `training_tree_node_results.json`).
-- Add compatibility checks in Observatory for missing tree artifacts.
+- Add Observatory checks for missing tree artifacts.
 
 ## Open Questions
 

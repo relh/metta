@@ -696,7 +696,8 @@ def analyze_cogsguard_policy(
     sample_every: int = 100,
     max_action_time_ms: int = 10_000,
 ) -> TrajectoryReport:
-    _, env_cfg, _ = get_mission(mission_name, cogs=cogs, steps=steps)
+    _, env_cfg, _ = get_mission(mission_name, cogs=cogs)
+    env_cfg.game.max_steps = steps
     env_for_rollout = resolve_env_for_seed(env_cfg, seed)
     policy_env_info = PolicyEnvInterface.from_mg_cfg(env_for_rollout)
     multi_policy = initialize_or_load_policy(policy_env_info, policy_spec, device_override="cpu")
@@ -1364,7 +1365,7 @@ def _plateau_step(checkpoints: list[TrajectoryCheckpoint]) -> int | None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze Cogsguard policy trajectories.")
-    parser.add_argument("--mission", default="cogsguard_machina_1.basic")
+    parser.add_argument("--mission", default="machina_1")
     parser.add_argument("--policy", action="append", required=True)
     parser.add_argument("--cogs", type=int, default=8)
     parser.add_argument("--steps", type=int, default=10_000)

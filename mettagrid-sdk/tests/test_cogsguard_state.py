@@ -95,7 +95,9 @@ def test_cogsguard_state_adapter_extracts_semantic_state(
 
 
 def test_cogsguard_state_adapter_handles_live_observation(cogsguard_env_info) -> None:
-    make_cogsguard_mission = pytest.importorskip("cogames.cogs_vs_clips.missions").make_cogsguard_mission
+    make_cogsguard_mission = pytest.importorskip(
+        "cogames.games.cogs_vs_clips.missions.machina_1"
+    ).make_cogsguard_mission
     mission = make_cogsguard_mission(num_agents=4, max_steps=10)
     sim = Simulation(mission.make_env())
     adapter = CogsguardStateAdapter()

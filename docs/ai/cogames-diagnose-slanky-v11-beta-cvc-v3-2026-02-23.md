@@ -5,7 +5,7 @@ Date: 2026-02-23 Branch: `richard-new-diagnose`
 ## Run Executed
 
 ```bash
-uv run cogames diagnose "metta://policy/slanky:v11" --mission-set cogsguard_evals
+uv run cogames diagnose "metta://policy/slanky:v11" --mission-set cvc_evals
 ```
 
 Resolved policy artifact:
