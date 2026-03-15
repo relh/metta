@@ -5,11 +5,15 @@
 ## Executive Summary
 
 Analyzed recent wandb runs (last 2 weeks) with prefix "relh" from `metta-research/metta` project. Found 11 runs, with
-the top performers using the `machina1_cloner` recipe with `sliced_scripted_cloner` loss and `dinky:v15` as supervisor
-policy.
+the top performers using the `machina1_cloner` recipe with `sliced_scripted_cloner` loss and a then-current `dinky`
+supervisor policy.
 
-**Key Finding:** The successful runs use behavioral cloning from a scripted teacher (`dinky:v15`) combined with PPO,
+**Key Finding:** The successful runs use behavioral cloning from a scripted teacher (`dinky`) combined with PPO,
 achieving heart.gained scores of 10-14.
+
+**Important:** The historical `dinky:v15` pin is stale. For current runs, use
+`recipes.experiment.machina_1.train(use_default_teacher=True)` so the recipe resolves the highest-ranked `dinky` on the
+current `beta-cvc` leaderboard.
 
 **Recommendation for Cogsguard:** Use `metta://policy/cogsguard?gear=10` (smart-gear meta role) as teacher with
 `sliced_cloner` mode.
@@ -46,7 +50,8 @@ All top runs share these characteristics:
    - `sliced_scripted_cloner`: enabled (action_loss_coef=1)
 
 2. **Teacher/BC Settings:**
-   - `supervisor_policy_uri`: `metta://policy/dinky:v15`
+   - `supervisor_policy_uri`: historical runs used a pinned `dinky` teacher; current defaults should resolve the top
+     `dinky` from the `beta-cvc` leaderboard instead of pinning an old version
    - `teacher_led_proportion`: 0.5 (best run)
    - `student_led_proportion`: 0.5 (best run)
 
@@ -184,6 +189,7 @@ trainer:
       teacher_led_proportion: 0.5
 
 training_env:
-  supervisor_policy_uri: 'metta://policy/dinky:v15' # For machina1
+  # For machina1, prefer recipes.experiment.machina_1.train(use_default_teacher=True)
+  # so the current top-ranked beta-cvc dinky policy is resolved dynamically.
   # For cogsguard, use: "metta://policy/cogsguard?gear=10"
 ```
