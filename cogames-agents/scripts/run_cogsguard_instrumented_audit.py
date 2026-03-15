@@ -31,20 +31,6 @@ MOVE_DELTAS = {
 }
 
 
-def _get_cogs_team_inventory(harness: DebugHarness) -> dict[str, int]:
-    c_sim = getattr(harness.sim, "_c_sim", None)
-    if c_sim is None:
-        return {}
-    get_team_inventories = getattr(c_sim, "get_team_inventories", None)
-    if callable(get_team_inventories):
-        team_inventories = get_team_inventories()
-        if isinstance(team_inventories, dict):
-            cogs = team_inventories.get("cogs", {})
-            if isinstance(cogs, dict):
-                return {str(key): int(value) for key, value in cogs.items()}
-    return {}
-
-
 def run_audit(
     *,
     steps: int,
@@ -80,7 +66,7 @@ def run_audit(
         role_counts: Counter[str] = Counter()
         adjacent_roles = {role: False for role in GEAR_COSTS}
 
-        hub_inv = _get_cogs_team_inventory(harness)
+        hub_inv = harness.object_inventory("hub")
         available_roles = {
             role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()
