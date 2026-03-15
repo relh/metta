@@ -27,7 +27,8 @@ from cogames_agents.evals.planky_evals import (
 
 from cogames.games.cogs_vs_clips.game import ForcedRoleVibesVariant
 from cogames.games.cogs_vs_clips.game.damage import DamageVariant
-from cogames.games.cogs_vs_clips.game.teams import TeamConfig
+from cogames.games.cogs_vs_clips.game.teams import TeamConfig, TeamVariant
+from cogames.games.cogs_vs_clips.game.vibes import VibesVariant
 from cogames.games.cogs_vs_clips.missions.arena import make_arena_map_builder
 from cogames.games.cogs_vs_clips.missions.mission import CvCMission
 from cogames.games.cogs_vs_clips.train.reward_variants import apply_reward_variants
@@ -671,9 +672,15 @@ def _collect_role_conditional_reward_keys() -> dict[str, set[str]]:
         map_builder=make_arena_map_builder(num_agents=4),
         min_cogs=4,
         max_cogs=4,
-        teams={"cogs": TeamConfig(num_agents=4)},
         max_steps=100,
-    ).with_variants([DamageVariant(), forced_roles])
+    ).with_variants(
+        [
+            TeamVariant(default_teams={"cogs": TeamConfig(num_agents=4)}),
+            DamageVariant(),
+            VibesVariant(),
+            forced_roles,
+        ]
+    )
     env = mission.make_env()
     apply_reward_variants(env, variants=["role_conditional"])
     if not env.game.agents:
