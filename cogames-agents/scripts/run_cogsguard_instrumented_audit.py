@@ -85,21 +85,17 @@ def run_audit(
             previous_role_by_agent[agent_id] = role
 
             role_enum = state.role if isinstance(state.role, Role) else None
-            if role_enum in ROLE_TO_STRUCTURE_TYPE:
-                station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
+            station_type = ROLE_TO_STRUCTURE_TYPE.get(role_enum) if role in GEAR_COSTS else None
+            if station_type is not None:
+                station = state.get_structure_position(station_type)
                 if station and is_adjacent((state.row, state.col), station):
                     adjacent_roles[role] = True
 
             action_name = state.last_action.name if state.last_action else ""
-            if (
-                state.using_object_this_step
-                and action_name in MOVE_DELTAS
-                and role in GEAR_COSTS
-                and role_enum in ROLE_TO_STRUCTURE_TYPE
-            ):
+            if state.using_object_this_step and action_name in MOVE_DELTAS and station_type is not None:
                 dr, dc = MOVE_DELTAS[action_name]
                 target = (state.row + dr, state.col + dc)
-                station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
+                station = state.get_structure_position(station_type)
                 if station and target == station:
                     station_uses[role] += 1
                     if available_roles.get(role, False):

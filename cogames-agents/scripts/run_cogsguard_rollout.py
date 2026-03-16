@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from typing import Iterable
+from collections.abc import Iterable
 
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
 from cogames_agents.policy.scripted_agent.cogsguard.prereq_trace import (
@@ -36,7 +36,7 @@ def _is_hub_tag(name: str, tags: Iterable[str]) -> bool:
 
 def _is_junction_tag(name: str, tags: Iterable[str]) -> bool:
     combined = {name, *tags}
-    return any("junction" in tag or "supply_depot" in tag or "junction" in tag for tag in combined)
+    return any("junction" in tag or "supply_depot" in tag for tag in combined)
 
 
 def _has_alignment_tag(name: str, tags: Iterable[str]) -> bool:
@@ -180,15 +180,15 @@ def run_rollout(
             role_enum = state.role if isinstance(state.role, Role) else None
             role = state.role.value if hasattr(state.role, "value") else str(state.role)
             if role in role_stats:
+                station_type = ROLE_TO_STRUCTURE_TYPE.get(role_enum) if role in GEAR_COSTS else None
                 observed_roles.add(role)
                 role_stats[role]["agents"].add(agent_id)
-                if role in expected_roles:
-                    role_counts_step[role] += 1
+                role_counts_step[role] += 1
                 if state.has_gear():
                     role_stats[role]["gear_seen"] = True
 
-                if role in GEAR_COSTS and role_enum in ROLE_TO_STRUCTURE_TYPE:
-                    station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
+                if station_type is not None:
+                    station = state.get_structure_position(station_type)
                     if station and is_adjacent((state.row, state.col), station):
                         adjacent_by_role[role] = True
 
@@ -203,15 +203,10 @@ def run_rollout(
                     role_stats[role]["gear_acquired"] += 1
 
                 action_name = state.last_action.name if state.last_action else ""
-                if (
-                    state.using_object_this_step
-                    and action_name in MOVE_DELTAS
-                    and role in GEAR_COSTS
-                    and role_enum in ROLE_TO_STRUCTURE_TYPE
-                ):
+                if state.using_object_this_step and action_name in MOVE_DELTAS and station_type is not None:
                     dr, dc = MOVE_DELTAS[action_name]
                     target = (state.row + dr, state.col + dc)
-                    station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
+                    station = state.get_structure_position(station_type)
                     if station and target == station:
                         role_stats[role]["gear_station_uses"] += 1
                         station_uses_step[role] += 1
@@ -366,34 +361,39 @@ def run_rollout(
                 gear_resource_windows_with_adjacent[role] += 1
 
         role_counts_history.append(role_counts_step)
-        if trace_roles and harness.step_count % trace_role_every == 0:
-            if trace_role_limit <= 0 or len(role_trace_lines) < trace_role_limit:
-                role_trace_lines.append(
-                    format_role_trace_line(
-                        step=harness.step_count,
-                        role_counts=role_counts_step,
-                        roles=sorted(expected_roles),
-                        transitions=transition_events,
-                    )
+        if (
+            trace_roles
+            and harness.step_count % trace_role_every == 0
+            and (trace_role_limit <= 0 or len(role_trace_lines) < trace_role_limit)
+        ):
+            role_trace_lines.append(
+                format_role_trace_line(
+                    step=harness.step_count,
+                    role_counts=role_counts_step,
+                    roles=sorted(expected_roles),
+                    transitions=transition_events,
                 )
+            )
 
-        if trace_resources:
-            if harness.step_count % trace_resource_every == 0:
-                if trace_resource_limit <= 0 or len(resource_trace_lines) < trace_resource_limit:
-                    snapshot = inventory_snapshot(hub_inv, TRACE_RESOURCES)
-                    delta = inventory_delta(last_hub_snapshot, snapshot)
-                    resource_trace_lines.append(
-                        format_resource_trace_line(
-                            step=harness.step_count,
-                            inventory=snapshot,
-                            delta=delta,
-                            station_uses=station_uses_step,
-                            station_uses_with_resources=station_uses_with_resources_step,
-                            adjacent_roles=adjacent_by_role,
-                            available_roles=gear_resources_available,
-                        )
-                    )
-                    last_hub_snapshot = snapshot
+        if (
+            trace_resources
+            and harness.step_count % trace_resource_every == 0
+            and (trace_resource_limit <= 0 or len(resource_trace_lines) < trace_resource_limit)
+        ):
+            snapshot = inventory_snapshot(hub_inv, TRACE_RESOURCES)
+            delta = inventory_delta(last_hub_snapshot, snapshot)
+            resource_trace_lines.append(
+                format_resource_trace_line(
+                    step=harness.step_count,
+                    inventory=snapshot,
+                    delta=delta,
+                    station_uses=station_uses_step,
+                    station_uses_with_resources=station_uses_with_resources_step,
+                    adjacent_roles=adjacent_by_role,
+                    available_roles=gear_resources_available,
+                )
+            )
+            last_hub_snapshot = snapshot
 
     print("Cogsguard rollout sanity check")
     print(f"- steps: {steps}")
