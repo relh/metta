@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _load_agent_runner_module():
     module_path = Path(__file__).resolve().parents[3] / "devops" / "cogent" / "agent-runner.py"
@@ -20,7 +22,7 @@ def _load_agent_runner_module():
     return module
 
 
-def test_main_returns_nonzero_when_push_fails(monkeypatch, tmp_path) -> None:
+def _prepare_runner(monkeypatch, tmp_path):  # noqa: ANN001
     runner = _load_agent_runner_module()
 
     metta_dir = tmp_path / "metta"
@@ -56,6 +58,11 @@ def test_main_returns_nonzero_when_push_fails(monkeypatch, tmp_path) -> None:
             stderr="",
         ),
     )
+    return runner, log_dir
+
+
+def test_main_returns_nonzero_when_push_fails(monkeypatch, tmp_path) -> None:
+    runner, _ = _prepare_runner(monkeypatch, tmp_path)
 
     def fake_subprocess_run(cmd, **kwargs):  # noqa: ANN001
         if cmd[:2] == ["git", "log"]:
@@ -67,7 +74,31 @@ def test_main_returns_nonzero_when_push_fails(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
     monkeypatch.setattr(sys, "argv", ["agent-runner.py", "--branch", "main", "--prompt-text", "hello"])
 
-    with __import__("pytest").raises(SystemExit) as exc_info:
+    with pytest.raises(SystemExit) as exc_info:
         runner.main()
 
     assert exc_info.value.code == 1
+
+
+def test_main_returns_nonzero_and_logs_timeout(monkeypatch, tmp_path) -> None:
+    runner, log_dir = _prepare_runner(monkeypatch, tmp_path)
+
+    def _timeout(*args, **kwargs):  # noqa: ANN001,ARG001
+        raise subprocess.TimeoutExpired(cmd=["agent"], timeout=60)
+
+    def fake_subprocess_run(cmd, **kwargs):  # noqa: ANN001
+        if cmd[:2] == ["git", "log"]:
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner, "run_agent", _timeout)
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(sys, "argv", ["agent-runner.py", "--branch", "main", "--prompt-text", "hello"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        runner.main()
+
+    assert exc_info.value.code == 1
+    log_files = list(log_dir.glob("*.log"))
+    assert len(log_files) == 1
+    assert "TIMEOUT: codex exceeded 60 minute limit" in log_files[0].read_text()

@@ -151,6 +151,13 @@ def remove_worktree(repo_dir: Path, wt_path: Path):
 # ---------------------------------------------------------------------------
 
 
+def _read_required_text(path: Path, error_label: str) -> str:
+    if not path.exists():
+        print(f"ERROR: {error_label} not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    return path.read_text()
+
+
 def read_content(
     skill: str | None, prompt: str | None, prompt_text: str | None, cogents_wt: Path, metta_wt: Path
 ) -> tuple[str, str]:
@@ -165,19 +172,13 @@ def read_content(
 
     if skill:
         path = cogents_wt / "skills" / skill / "SKILL.md"
-        if not path.exists():
-            print(f"ERROR: Skill file not found: {path}", file=sys.stderr)
-            sys.exit(1)
-        parts.append(path.read_text())
+        parts.append(_read_required_text(path, "Skill file"))
         label_parts.append(f"skill-{skill}")
 
     if prompt:
         prompt_dir = metta_wt / "devops" / "cogent" / "prompts"
         path = prompt_dir / prompt
-        if not path.exists():
-            print(f"ERROR: Prompt file not found: {path}", file=sys.stderr)
-            sys.exit(1)
-        parts.append(path.read_text())
+        parts.append(_read_required_text(path, "Prompt file"))
         label_parts.append(f"prompt-{Path(prompt).stem}")
 
     if prompt_text:
@@ -262,23 +263,18 @@ def main():
         print(f"[cogent] Creating metta worktree for {args.branch}...")
         metta_wt = create_worktree(METTA_DIR, args.branch, run_dir, "metta")
 
+        push_branch = args.create_branch or args.branch
+        checkout_cmd = ["git", "checkout", "-B", push_branch]
         if args.create_branch:
-            push_branch = args.create_branch
             print(f"[cogent] Creating branch {push_branch}...")
-            subprocess.run(
-                ["git", "checkout", "-B", push_branch],
-                cwd=metta_wt,
-                check=True,
-                capture_output=True,
-            )
         else:
-            push_branch = args.branch
-            subprocess.run(
-                ["git", "checkout", "-B", push_branch, f"origin/{args.branch}"],
-                cwd=metta_wt,
-                check=True,
-                capture_output=True,
-            )
+            checkout_cmd.append(f"origin/{args.branch}")
+        subprocess.run(
+            checkout_cmd,
+            cwd=metta_wt,
+            check=True,
+            capture_output=True,
+        )
 
         cogents_branch = resolve_branch(COGENTS_DIR, args.branch)
         print(f"[cogent] Creating cogents worktree for {cogents_branch}...")
@@ -295,19 +291,19 @@ def main():
             print(f"[cogent] {msg}", file=sys.stderr)
             log_path.write_text(msg + "\n")
             exit_code = 1
+        else:
+            output = (
+                f"=== STDOUT ===\n{result.stdout}\n\n"
+                f"=== STDERR ===\n{result.stderr}\n\n"
+                f"=== EXIT CODE: {result.returncode} ===\n"
+            )
+            log_path.write_text(output)
+            print(f"[cogent] Done. exit_code={result.returncode} log={log_path}")
 
-        output = (
-            f"=== STDOUT ===\n{result.stdout}\n\n"
-            f"=== STDERR ===\n{result.stderr}\n\n"
-            f"=== EXIT CODE: {result.returncode} ===\n"
-        )
-        log_path.write_text(output)
-        print(f"[cogent] Done. exit_code={result.returncode} log={log_path}")
+            if args.asana_task_id:
+                print(f"===AGENT_RESULT_START===\n{result.stdout}\n===AGENT_RESULT_END===")
 
-        if args.asana_task_id:
-            print(f"===AGENT_RESULT_START===\n{result.stdout}\n===AGENT_RESULT_END===")
-
-        exit_code = result.returncode
+            exit_code = result.returncode
 
     finally:
         if metta_wt:
