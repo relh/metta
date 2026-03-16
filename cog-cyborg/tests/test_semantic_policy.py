@@ -7,6 +7,7 @@ from mettagrid_sdk.games.cogsguard.prompt_adapter import CogsguardPromptAdapter
 from mettagrid_sdk.sdk import GridPosition, MacroDirective, MettagridState, SelfState, SemanticEntity, TeamSummary
 
 from cogames.games.cogs_vs_clips.missions.machina_1 import make_cogsguard_mission
+from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator.simulator import Simulation
 
 
@@ -32,6 +33,15 @@ class _TargetDirectivePolicy(MettagridSemanticPolicy):
             note="push the west lane target",
         )
         return policy
+
+
+def _directive_role_for_objective(objective: str, *, agent_id: int) -> str:
+    mission = make_cogsguard_mission(num_agents=8, max_steps=20)
+    env = mission.make_env()
+    policy = MettagridSemanticPolicy(PolicyEnvInterface.from_mg_cfg(env)).agent_policy(agent_id)
+    policy._macro_directive = lambda state: MacroDirective(objective=objective)  # type: ignore[method-assign]
+    policy.step(Simulation(env).agent(agent_id).observation)
+    return str(policy.infos["role"])
 
 
 def test_semantic_policy_produces_valid_action_on_live_observation(cogsguard_env_info) -> None:
@@ -66,6 +76,15 @@ def test_semantic_policy_applies_typed_macro_directive(cogsguard_env_info) -> No
     assert agent_policy.infos["directive_resource_bias"] == "oxygen"
     assert agent_policy.infos["directive_objective"] == "resource_coverage"
     assert agent_policy.infos["directive_note"] == "test-opening"
+
+
+def test_semantic_policy_resource_coverage_objective_keeps_pressure_agents_mining() -> None:
+    assert _directive_role_for_objective("resource_coverage", agent_id=4) == "miner"
+
+
+def test_semantic_policy_economy_bootstrap_only_uses_small_aligner_group() -> None:
+    assert _directive_role_for_objective("economy_bootstrap", agent_id=4) == "aligner"
+    assert _directive_role_for_objective("economy_bootstrap", agent_id=6) == "miner"
 
 
 def test_semantic_policy_surfaces_tactical_skill_library(cogsguard_env_info) -> None:

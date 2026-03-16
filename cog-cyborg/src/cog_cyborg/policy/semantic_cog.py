@@ -68,6 +68,7 @@ _EXTRACTOR_MEMORY_STEPS = 600
 _OSCILLATION_HISTORY_STEPS = 6
 _OSCILLATION_UNSTICK_STEPS = 4
 _MINING_ALIGNER_MIN_RESOURCE = 20
+_ECONOMY_BOOTSTRAP_ALIGNER_BUDGET = 2
 _ALIGNER_PRIORITY = (4, 5, 6, 7, 3)
 _SCRAMBLER_PRIORITY = (7, 6)
 _GEAR_COSTS = COGSGUARD_GEAR_COSTS
@@ -349,7 +350,7 @@ class SemanticCogAgentPolicy(AgentPolicy):
         self._resource_bias = (
             self._default_resource_bias if directive.resource_bias is None else directive.resource_bias
         )
-        role = directive.role or self._desired_role(state)
+        role = directive.role or self._desired_role(state, objective=directive.objective)
         action, summary = self._choose_action(state, role)
         self._record_navigation_observation(current_pos, summary)
         macro_snapshot = self._macro_snapshot(state, role)
@@ -421,16 +422,16 @@ class SemanticCogAgentPolicy(AgentPolicy):
             metadata=dict(directive.metadata),
         )
 
-    def _desired_role(self, state: MettagridState) -> str:
-        aligner_budget, scrambler_budget = self._pressure_budgets(state)
+    def _desired_role(self, state: MettagridState, *, objective: str | None = None) -> str:
+        aligner_budget, scrambler_budget = self._pressure_budgets(state, objective=objective)
         scrambler_ids = set(_SCRAMBLER_PRIORITY[:scrambler_budget])
         aligner_ids = []
         for agent_id in _ALIGNER_PRIORITY:
             if agent_id in scrambler_ids:
                 continue
-            aligner_ids.append(agent_id)
             if len(aligner_ids) == aligner_budget:
                 break
+            aligner_ids.append(agent_id)
         if self._agent_id in scrambler_ids:
             return "scrambler"
         if self._agent_id in aligner_ids:
@@ -1188,7 +1189,7 @@ class SemanticCogAgentPolicy(AgentPolicy):
             best_enemy_scramble_block=best_enemy_scramble_block,
         )
 
-    def _pressure_budgets(self, state: MettagridState) -> tuple[int, int]:
+    def _pressure_budgets(self, state: MettagridState, *, objective: str | None = None) -> tuple[int, int]:
         step = state.step or self._step_index
 
         pressure_budget = 4
@@ -1201,6 +1202,10 @@ class SemanticCogAgentPolicy(AgentPolicy):
         if step >= 5_000 and _team_can_refill_hearts(state):
             scrambler_budget = 2
         aligner_budget = pressure_budget - scrambler_budget
+        if objective == "resource_coverage":
+            return 0, 0
+        if objective == "economy_bootstrap":
+            return min(aligner_budget, _ECONOMY_BOOTSTRAP_ALIGNER_BUDGET), 0
         return aligner_budget, scrambler_budget
 
     def _in_enemy_aoe(self, state: MettagridState, position: tuple[int, int], *, team_id: str) -> bool:
