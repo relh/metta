@@ -148,6 +148,11 @@ class TrainingEnvironment(ABC):
     def total_parallel_agents(self) -> int:
         """Total agent slots tracked across all vectorized environments."""
 
+    @property
+    @abstractmethod
+    def curriculum(self) -> Curriculum | None:
+        """Curriculum driving environment task selection."""
+
 
 class VectorizedTrainingEnvironment(TrainingEnvironment):
     """Manages the vectorized training environment and experience generation."""
@@ -266,6 +271,10 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
         if isinstance(vecenv_agents, int):
             return vecenv_agents
         return self._num_envs * self._num_agents
+
+    @property
+    def curriculum(self) -> Curriculum | None:
+        return self._curriculum
 
     @property
     def single_action_space(self) -> Any:

@@ -4,8 +4,6 @@ import logging
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import Field
-
 from metta.rl.training import ComponentContext
 from metta.rl.utils import should_run
 
@@ -26,8 +24,8 @@ class TrainerComponent:
     """Base class for training components."""
 
     _master_only: bool = False
-    _epoch_interval: int = Field(default=1, ge=1)
-    _step_interval: int = Field(default=1, ge=1)
+    _epoch_interval: int = 1
+    _step_interval: int = 1
 
     _context: ComponentContext
     _prev_epoch_for_epoch_callbacks: Optional[int]
@@ -49,7 +47,7 @@ class TrainerComponent:
     def should_handle_step(self, *, current_step: int, previous_step: int) -> bool:
         """Return True when this component should receive a step callback."""
 
-        interval = getattr(self, "_step_interval", 0)
+        interval = self._step_interval
         if interval <= 0:
             return False
         return should_run(current_step, interval, previous=previous_step)
@@ -57,7 +55,7 @@ class TrainerComponent:
     def should_handle_epoch(self, epoch: int) -> bool:
         """Return True when this component should receive an epoch callback."""
 
-        interval = getattr(self, "_epoch_interval", 1)
+        interval = self._epoch_interval
         if interval == 0:
             return True
         should_handle = should_run(epoch, interval, previous=self._prev_epoch_for_epoch_callbacks)

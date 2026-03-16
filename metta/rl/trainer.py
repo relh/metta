@@ -92,7 +92,7 @@ class Trainer:
         # Create an optimizer per trainable policy and attach it to the policy instance.
         for name, pol in self._policy_assets.policies.items():
             asset_cfg = self._policy_assets.get_config(name)
-            optimizer_cfg = getattr(asset_cfg, "optimizer", None)
+            optimizer_cfg = asset_cfg.optimizer
             if not asset_cfg.trainable:
                 continue
             if optimizer_cfg is None:
@@ -145,11 +145,7 @@ class Trainer:
             raise ValueError("No trainable policies in policy_assets; cannot build experience buffer.")
         merged_policy_spec = _merge_policy_specs(trainable_policy_specs)
 
-        batch_info = self._env.batch_info
-
-        parallel_agents = getattr(self._env, "total_parallel_agents", None)
-        if parallel_agents is None:
-            parallel_agents = batch_info.num_envs * self._env.policy_env_info.num_agents
+        parallel_agents = self._env.total_parallel_agents
 
         self._experience = Experience.from_losses(
             total_agents=parallel_agents,
@@ -171,7 +167,7 @@ class Trainer:
         )
 
         # Extract curriculum from environment if available
-        curriculum = getattr(self._env, "_curriculum", None)
+        curriculum = self._env.curriculum
 
         self._train_epoch_callable: Callable[[], None] = self._run_epoch
 
@@ -315,7 +311,7 @@ class Trainer:
             infos: Step information from environment (only used for STEP callback)
         """
         current_step = self._context.agent_step
-        previous_step = getattr(self, "_prev_agent_step_for_step_callbacks", current_step)
+        previous_step = self._prev_agent_step_for_step_callbacks
         current_epoch = self._context.epoch
 
         for component in self._components:
