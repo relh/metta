@@ -4,7 +4,15 @@ from cog_cyborg.policy import MettagridSemanticPolicy
 from cog_cyborg.policy.semantic_cog import _GEAR_COSTS, _HUB_OFFSETS, SharedWorldModel, _phase_name
 from mettagrid_sdk.games.cogsguard import COGSGUARD_BOOTSTRAP_HUB_OFFSETS, COGSGUARD_GEAR_COSTS
 from mettagrid_sdk.games.cogsguard.prompt_adapter import CogsguardPromptAdapter
-from mettagrid_sdk.sdk import GridPosition, MacroDirective, MettagridState, SelfState, SemanticEntity, TeamSummary
+from mettagrid_sdk.sdk import (
+    GridPosition,
+    MacroDirective,
+    MettagridState,
+    SelfState,
+    SemanticEntity,
+    StateHelperCatalog,
+    TeamSummary,
+)
 
 from cogames.games.cogs_vs_clips.missions.machina_1 import make_cogsguard_mission
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
@@ -52,6 +60,49 @@ def test_semantic_policy_produces_valid_action_on_live_observation(cogsguard_env
     action = policy.agent_policy(0).step(sim.agent(0).observation)
 
     assert action.name in cogsguard_env_info.action_names
+
+
+def test_semantic_policy_surfaces_recent_event_types_after_observation_transition(
+    cogsguard_env_info,
+    make_observation,
+    make_tag_token,
+    make_token,
+) -> None:
+    center_row = cogsguard_env_info.obs_height // 2
+    center_col = cogsguard_env_info.obs_width // 2
+    agent_policy = MettagridSemanticPolicy(cogsguard_env_info).agent_policy(0)
+
+    previous_obs = make_observation(
+        cogsguard_env_info,
+        [
+            make_tag_token(cogsguard_env_info, "team:cogs", row=center_row, col=center_col),
+            make_tag_token(cogsguard_env_info, "type:agent", row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "inv:aligner", 1, row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "agent_id", 0, row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "agent:group", 0, row=center_row, col=center_col),
+        ],
+    )
+    current_obs = make_observation(
+        cogsguard_env_info,
+        [
+            make_tag_token(cogsguard_env_info, "team:cogs", row=center_row, col=center_col),
+            make_tag_token(cogsguard_env_info, "type:agent", row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "inv:aligner", 1, row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "inv:heart", 1, row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "agent_id", 0, row=center_row, col=center_col),
+            make_token(cogsguard_env_info, "agent:group", 0, row=center_row, col=center_col),
+            make_tag_token(cogsguard_env_info, "type:junction", row=center_row - 1, col=center_col),
+        ],
+    )
+
+    agent_policy.step(previous_obs)
+    agent_policy.step(current_obs)
+
+    assert agent_policy._previous_state is not None
+    assert StateHelperCatalog(agent_policy._previous_state).recent_event_types() == [
+        "heart_acquired",
+        "neutral_junction_seen",
+    ]
 
 
 def test_semantic_policy_registers_short_name(cogsguard_env_info) -> None:

@@ -12,11 +12,8 @@ from mettagrid_sdk.games.cogsguard import (
     COGSGUARD_JUNCTION_ALIGN_DISTANCE,
     COGSGUARD_JUNCTION_AOE_RANGE,
     COGSGUARD_ROLE_HP_THRESHOLDS,
-    CogsguardEventExtractor,
-    CogsguardPromptAdapter,
-    CogsguardStateAdapter,
+    CogsguardSemanticSurface,
 )
-from mettagrid_sdk.runtime.observation import ObservationEnvelope
 from mettagrid_sdk.sdk import MacroDirective, MettagridState, SemanticEntity
 
 from cog_cyborg.memory import MemoryStore
@@ -73,7 +70,7 @@ _ALIGNER_PRIORITY = (4, 5, 6, 7, 3)
 _SCRAMBLER_PRIORITY = (7, 6)
 _GEAR_COSTS = COGSGUARD_GEAR_COSTS
 _HUB_OFFSETS = COGSGUARD_BOOTSTRAP_HUB_OFFSETS
-_COGSGUARD_PROMPT_ADAPTER = CogsguardPromptAdapter()
+_COGSGUARD_SURFACE = CogsguardSemanticSurface()
 _STATION_TARGETS_BY_AGENT = {
     "aligner": {
         0: (-3, 7),
@@ -289,8 +286,6 @@ class SemanticCogAgentPolicy(AgentPolicy):
         self._world_model = world_model
         self._shared_claims = shared_claims
         self._shared_junctions = shared_junctions
-        self._state_adapter = CogsguardStateAdapter()
-        self._event_extractor = CogsguardEventExtractor()
         self._memory = MemoryStore()
         self._previous_state: MettagridState | None = None
         self._last_global_pos: tuple[int, int] | None = None
@@ -316,10 +311,12 @@ class SemanticCogAgentPolicy(AgentPolicy):
 
     def step(self, obs: AgentObservation) -> Action:
         self._step_index += 1
-        state = self._state_adapter.build_state(
-            ObservationEnvelope(raw_observation=obs, policy_env_info=self.policy_env_info, step=self._step_index)
+        state = _COGSGUARD_SURFACE.build_state_with_events(
+            obs,
+            policy_env_info=self.policy_env_info,
+            step=self._step_index,
+            previous_state=self._previous_state,
         )
-        state.recent_events = self._event_extractor.extract_events(self._previous_state, state)
         return self.evaluate_state(state)
 
     def evaluate_state(self, state: MettagridState) -> Action:
@@ -403,7 +400,7 @@ class SemanticCogAgentPolicy(AgentPolicy):
         return MacroDirective()
 
     def render_skill_library(self) -> str:
-        return _COGSGUARD_PROMPT_ADAPTER.render_skill_library()
+        return _COGSGUARD_SURFACE.render_skill_library()
 
     def _sanitize_macro_directive(self, directive: MacroDirective) -> MacroDirective:
         role = directive.role if directive.role in {"miner", "aligner", "scrambler", "scout"} else None

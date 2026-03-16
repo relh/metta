@@ -153,6 +153,7 @@ def _build_state(
     step: int,
     agent_id: int = 2,
     shared_inventory: dict[str, int] | None = None,
+    inventory: dict[str, int] | None = None,
     recent_events: list[SemanticEvent] | None = None,
 ) -> MettagridState:
     return MettagridState(
@@ -163,7 +164,7 @@ def _build_state(
             entity_type="agent",
             position=GridPosition(x=0, y=0),
             attributes={"agent_id": agent_id, "team": "cogs"},
-            inventory={},
+            inventory={} if inventory is None else inventory,
         ),
         team_summary=TeamSummary(team_id="cogs", shared_inventory={} if shared_inventory is None else shared_inventory),
         recent_events=[] if recent_events is None else recent_events,
@@ -247,6 +248,29 @@ def test_anthropic_pilot_review_prompt_warns_against_rotation_after_many_rewrite
     assert "High rewrite churn warning:" in prompt
     assert "do not add another miner/aligner/scrambler rotation" in prompt
     assert "simplify instead of adding more role rotations" in prompt
+
+
+def test_anthropic_pilot_build_sdk_surfaces_objective_and_resource_context() -> None:
+    session = AnthropicPilotSession(
+        client=_FakeClient(_review_response(_directive_policy_source(note="opening coverage"))),
+        model="fake",
+    )
+    memory = MemoryStore()
+    session.directive_for_state(_build_state(step=1), memory=memory)
+
+    sdk = session._build_sdk(
+        _build_state(
+            step=2,
+            shared_inventory={"oxygen": 1},
+            inventory={"carbon": 1},
+        ),
+        memory=memory,
+    )
+
+    assert "current_objective:resource_coverage" in sdk.helpers.shared_objectives()
+    assert "seen_resource:carbon" in sdk.helpers.shared_objectives()
+    assert "missing_resource:germanium" in sdk.helpers.shared_objectives()
+    assert "missing_resource:silicon" in sdk.helpers.shared_objectives()
 
 
 def test_anthropic_cyborg_policy_parses_record_step_traces_false_string() -> None:

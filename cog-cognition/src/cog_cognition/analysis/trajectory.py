@@ -4,8 +4,7 @@ import argparse
 from collections import Counter
 from dataclasses import dataclass, field
 
-from mettagrid_sdk.games.cogsguard import CogsguardStateAdapter
-from mettagrid_sdk.runtime.observation import ObservationEnvelope
+from mettagrid_sdk.games.cogsguard import CogsguardSemanticSurface
 from pydantic import BaseModel, Field
 
 from cogames.cli.mission import get_mission
@@ -234,7 +233,7 @@ class _CogsguardTrajectorySampler(SimulatorEventHandler):
         super().__init__()
         self._policy_env_info = policy_env_info
         self._sample_every = sample_every
-        self._state_adapter = CogsguardStateAdapter()
+        self._semantic_surface = CogsguardSemanticSurface()
         self._team_id: str | None = None
         self._hub_position: tuple[int, int] = (0, 0)
         self._checkpoints: list[TrajectoryCheckpoint] = []
@@ -340,12 +339,10 @@ class _CogsguardTrajectorySampler(SimulatorEventHandler):
 
     def _collect_states(self, step: int):
         return [
-            self._state_adapter.build_state(
-                ObservationEnvelope(
-                    raw_observation=self._sim.agent(agent_id).observation,
-                    policy_env_info=self._policy_env_info,
-                    step=step,
-                )
+            self._semantic_surface.build_state(
+                self._sim.agent(agent_id).observation,
+                policy_env_info=self._policy_env_info,
+                step=step,
             )
             for agent_id in range(self._sim.num_agents)
         ]

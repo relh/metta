@@ -10,6 +10,7 @@ from mettagrid_sdk.games.cogsguard.constants import (
 from mettagrid_sdk.games.cogsguard.events import CogsguardEventExtractor
 from mettagrid_sdk.games.cogsguard.prompt_adapter import CogsguardPromptAdapter
 from mettagrid_sdk.games.cogsguard.state import CogsguardStateAdapter
+from mettagrid_sdk.games.cogsguard.surface import CogsguardSemanticSurface
 
 __all__ = [
     "COGSGUARD_BOOTSTRAP_HUB_OFFSETS",
@@ -21,5 +22,6 @@ __all__ = [
     "COGSGUARD_ROLE_NAMES",
     "CogsguardEventExtractor",
     "CogsguardPromptAdapter",
+    "CogsguardSemanticSurface",
     "CogsguardStateAdapter",
 ]
