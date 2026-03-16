@@ -44,30 +44,28 @@ def _make_state(
     )
 
 
-def test_position_updates_from_executed_action(policy_env_info: PolicyEnvInterface) -> None:
-    policy = CogsguardAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.MINER)
-    state = _make_state()
-
-    state.last_action = Action(name="move_north")
-    state.last_action_executed = "move_south"
-
-    policy._update_agent_position(state)
-
-    assert (state.row, state.col) == (3, 2)
-
-
-def test_position_falls_back_to_intended_action_when_executed_action_missing(
+@pytest.mark.parametrize(
+    ("last_action_name", "last_action_executed", "expected_position"),
+    [
+        pytest.param("move_north", "move_south", (3, 2), id="uses-executed-action"),
+        pytest.param("move_east", None, (2, 3), id="falls-back-to-intended-action"),
+    ],
+)
+def test_update_agent_position(
     policy_env_info: PolicyEnvInterface,
+    last_action_name: str,
+    last_action_executed: str | None,
+    expected_position: tuple[int, int],
 ) -> None:
     policy = CogsguardAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.MINER)
     state = _make_state()
 
-    state.last_action = Action(name="move_east")
-    state.last_action_executed = None
+    state.last_action = Action(name=last_action_name)
+    state.last_action_executed = last_action_executed
 
     policy._update_agent_position(state)
 
-    assert (state.row, state.col) == (2, 3)
+    assert (state.row, state.col) == expected_position
 
 
 def test_read_inventory_parses_last_action_without_center_location(

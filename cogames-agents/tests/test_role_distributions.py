@@ -1,10 +1,4 @@
-"""Tests for role distribution and URI-based role parameter assignment.
-
-Verifies that:
-- Different URI role params produce the expected agent role assignments
-- Role distribution across agents is non-degenerate
-- The scripted registry maps names to URIs correctly for each role variant
-"""
+"""Tests for scripted role distribution and URI-based role assignment."""
 
 from __future__ import annotations
 
@@ -21,153 +15,90 @@ from cogames_agents.policy.evolution.cogsguard.evolution import (
 from cogames_agents.policy.evolution.cogsguard.evolutionary_coordinator import (
     EvolutionaryRoleCoordinator,
 )
-from cogames_agents.policy.scripted_registry import (
-    resolve_scripted_agent_uri,
+from cogames_agents.policy.scripted_registry import resolve_scripted_agent_uri
+
+ROLE_VARIANTS = ("role", "role_nim", "wombo", "teacher")
+BASE_ROLE_VIBES = (
+    ("BaseMiner", "miner"),
+    ("BaseScout", "scout"),
+    ("BaseAligner", "aligner"),
+    ("BaseScrambler", "scrambler"),
 )
 
-# ---------------------------------------------------------------------------
-# URI resolution tests for role variants
-# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def coordinator() -> EvolutionaryRoleCoordinator:
+    return EvolutionaryRoleCoordinator(num_agents=20, rng=random.Random(42))
 
 
-class TestRoleURIResolution:
-    """Test that role-related agent names resolve to expected URIs."""
-
-    _ROLE_VARIANTS = [
-        "role",
-        "role_nim",
-        "wombo",
-        "teacher",
-    ]
-
-    @pytest.mark.parametrize("name", _ROLE_VARIANTS)
-    def test_role_variant_uri(self, name: str) -> None:
-        uri = resolve_scripted_agent_uri(name)
-        assert uri.startswith("metta://policy/")
-        assert name in uri
+def _catalog_with_dummy_behavior() -> RoleCatalog:
+    catalog = RoleCatalog()
+    catalog.add_behavior(
+        "b0",
+        BehaviorSource.COMMON,
+        lambda _: True,
+        lambda _: None,
+        lambda _: False,  # type: ignore[arg-type]
+    )
+    return catalog
 
 
-# ---------------------------------------------------------------------------
-# Coordinator role distribution tests
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("name", ROLE_VARIANTS)
+def test_role_variant_uri(name: str) -> None:
+    uri = resolve_scripted_agent_uri(name)
+    assert uri.startswith("metta://policy/")
+    assert name in uri
 
 
-class TestRoleDistribution:
-    """Test that the coordinator distributes roles across agents."""
-
-    @pytest.fixture
-    def coordinator(self) -> EvolutionaryRoleCoordinator:
-        return EvolutionaryRoleCoordinator(
-            num_agents=20,
-            rng=random.Random(42),
-        )
-
-    def test_all_base_roles_assigned(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        """With enough agents, all four base roles should be assigned."""
-        roles_assigned: set[str] = set()
-        for agent_id in range(20):
-            role = coordinator.assign_role(agent_id)
-            roles_assigned.add(role.name)
-
-        expected = {"BaseMiner", "BaseScout", "BaseAligner", "BaseScrambler"}
-        assert expected.issubset(roles_assigned)
-
-    def test_role_assignment_deterministic(self) -> None:
-        """Fixed seed should give identical role assignments."""
-
-        def assign_all(seed: int) -> list[str]:
-            c = EvolutionaryRoleCoordinator(num_agents=10, rng=random.Random(seed))
-            return [c.assign_role(i).name for i in range(10)]
-
-        assert assign_all(99) == assign_all(99)
+def test_all_base_roles_assigned(coordinator: EvolutionaryRoleCoordinator) -> None:
+    roles_assigned = {coordinator.assign_role(agent_id).name for agent_id in range(20)}
+    expected = {"BaseMiner", "BaseScout", "BaseAligner", "BaseScrambler"}
+    assert expected.issubset(roles_assigned)
 
 
-# ---------------------------------------------------------------------------
-# Fitness-weighted role selection distribution
-# ---------------------------------------------------------------------------
+def test_role_assignment_deterministic() -> None:
+    def assign_all(seed: int) -> list[str]:
+        policy = EvolutionaryRoleCoordinator(num_agents=10, rng=random.Random(seed))
+        return [policy.assign_role(agent_id).name for agent_id in range(10)]
+
+    assert assign_all(99) == assign_all(99)
 
 
-class TestFitnessWeightedDistribution:
-    """Test that fitness affects role selection probability."""
+def test_high_fitness_role_selected_more() -> None:
+    catalog = _catalog_with_dummy_behavior()
+    catalog.register_role(RoleDef(id=-1, name="HighFit", games=10, fitness=0.95, tiers=[RoleTier(behavior_ids=[0])]))
+    catalog.register_role(RoleDef(id=-1, name="LowFit", games=10, fitness=0.05, tiers=[RoleTier(behavior_ids=[0])]))
 
-    def test_high_fitness_role_selected_more(self) -> None:
-        """A role with high fitness should be picked more often."""
-        catalog = RoleCatalog()
-        # Add some dummy behaviors
-        catalog.add_behavior(
-            "b0",
-            BehaviorSource.COMMON,
-            lambda _: True,
-            lambda _: None,
-            lambda _: False,  # type: ignore[arg-type]
-        )
+    rng = random.Random(42)
+    counts = {0: 0, 1: 0}
+    for _ in range(200):
+        counts[pick_role_id_weighted(catalog, [0, 1], rng)] += 1
 
-        # Create two roles with different fitness
-        high_fit = RoleDef(id=-1, name="HighFit", games=10, fitness=0.95, tiers=[RoleTier(behavior_ids=[0])])
-        low_fit = RoleDef(id=-1, name="LowFit", games=10, fitness=0.05, tiers=[RoleTier(behavior_ids=[0])])
-        catalog.register_role(high_fit)
-        catalog.register_role(low_fit)
-
-        rng = random.Random(42)
-        counts = {0: 0, 1: 0}
-        for _ in range(200):
-            picked = pick_role_id_weighted(catalog, [0, 1], rng)
-            counts[picked] += 1
-
-        assert counts[0] > counts[1], "High-fitness role should be selected more often"
-
-    def test_zero_games_roles_still_selectable(self) -> None:
-        """Roles with no games should still have a chance to be selected."""
-        catalog = RoleCatalog()
-        catalog.add_behavior(
-            "b0",
-            BehaviorSource.COMMON,
-            lambda _: True,
-            lambda _: None,
-            lambda _: False,  # type: ignore[arg-type]
-        )
-        new_role = RoleDef(id=-1, name="NewRole", games=0, fitness=0.0, tiers=[RoleTier(behavior_ids=[0])])
-        catalog.register_role(new_role)
-
-        rng = random.Random(42)
-        picked = pick_role_id_weighted(catalog, [0], rng)
-        assert picked == 0
+    assert counts[0] > counts[1], "High-fitness role should be selected more often"
 
 
-# ---------------------------------------------------------------------------
-# Vibe mapping distribution
-# ---------------------------------------------------------------------------
+def test_zero_games_roles_still_selectable() -> None:
+    catalog = _catalog_with_dummy_behavior()
+    catalog.register_role(RoleDef(id=-1, name="NewRole", games=0, fitness=0.0, tiers=[RoleTier(behavior_ids=[0])]))
+
+    assert pick_role_id_weighted(catalog, [0], random.Random(42)) == 0
 
 
-class TestVibeDistribution:
-    """Test that vibes map correctly from evolved roles."""
+@pytest.mark.parametrize(("role_name", "expected_vibe"), BASE_ROLE_VIBES)
+def test_base_role_maps_to_expected_vibe(
+    coordinator: EvolutionaryRoleCoordinator,
+    role_name: str,
+    expected_vibe: str,
+) -> None:
+    role = coordinator.catalog.roles[coordinator.catalog.find_role_id(role_name)]
+    assert coordinator.map_role_to_vibe(role) == expected_vibe
 
-    @pytest.fixture
-    def coordinator(self) -> EvolutionaryRoleCoordinator:
-        return EvolutionaryRoleCoordinator(num_agents=4, rng=random.Random(42))
 
-    def test_base_miner_maps_to_miner_vibe(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        role = coordinator.catalog.roles[coordinator.catalog.find_role_id("BaseMiner")]
-        assert coordinator.map_role_to_vibe(role) == "miner"
+def test_empty_role_maps_to_gear(coordinator: EvolutionaryRoleCoordinator) -> None:
+    assert coordinator.map_role_to_vibe(RoleDef(id=-1, name="Empty", tiers=[])) == "gear"
 
-    def test_base_scout_maps_to_scout_vibe(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        role = coordinator.catalog.roles[coordinator.catalog.find_role_id("BaseScout")]
-        assert coordinator.map_role_to_vibe(role) == "scout"
 
-    def test_base_aligner_maps_to_aligner_vibe(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        role = coordinator.catalog.roles[coordinator.catalog.find_role_id("BaseAligner")]
-        assert coordinator.map_role_to_vibe(role) == "aligner"
-
-    def test_base_scrambler_maps_to_scrambler_vibe(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        role = coordinator.catalog.roles[coordinator.catalog.find_role_id("BaseScrambler")]
-        assert coordinator.map_role_to_vibe(role) == "scrambler"
-
-    def test_empty_role_maps_to_gear(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        empty_role = RoleDef(id=-1, name="Empty", tiers=[])
-        assert coordinator.map_role_to_vibe(empty_role) == "gear"
-
-    def test_choose_vibe_returns_valid(self, coordinator: EvolutionaryRoleCoordinator) -> None:
-        valid_vibes = {"miner", "scout", "aligner", "scrambler", "gear"}
-        for agent_id in range(4):
-            vibe = coordinator.choose_vibe(agent_id)
-            assert vibe in valid_vibes
+def test_choose_vibe_returns_valid(coordinator: EvolutionaryRoleCoordinator) -> None:
+    valid_vibes = {"miner", "scout", "aligner", "scrambler", "gear"}
+    for agent_id in range(4):
+        assert coordinator.choose_vibe(agent_id) in valid_vibes
