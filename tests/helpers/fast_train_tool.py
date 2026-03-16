@@ -9,7 +9,7 @@ from metta.agent.components.actor import ActionProbsConfig
 from metta.agent.policies.fast import FastConfig
 from metta.agent.policy import Policy, PolicyArchitecture
 from metta.cogworks.curriculum import env_curriculum
-from metta.rl.checkpoint_manager import CheckpointManager
+from metta.rl.checkpoint_manager import TRAINER_STATE_FILENAME, CheckpointManager
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
@@ -56,7 +56,7 @@ class FastCheckpointTrainTool(TrainTool):
 
         checkpoint_manager = CheckpointManager(run=run_name, system_cfg=self.system)
 
-        trainer_state_path = checkpoint_manager.checkpoint_dir / "trainer_state.pt"
+        trainer_state_path = checkpoint_manager.checkpoint_dir / TRAINER_STATE_FILENAME
         if trainer_state_path.exists():
             previous_state = torch.load(trainer_state_path, weights_only=False)
             previous_agent_step = int(previous_state.get("agent_step", 0))

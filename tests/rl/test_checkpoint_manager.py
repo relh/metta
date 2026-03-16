@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
@@ -50,7 +51,8 @@ class ActionTestPolicy(Policy):
 
     def initialize_to_environment(self, policy_env_info: PolicyEnvInterface, device: torch.device):
         self._device = torch.device(device)
-        self.components["action_embedding"].initialize_to_environment(policy_env_info, self._device)
+        action_embedding = cast(ActionEmbedding, self.components["action_embedding"])
+        action_embedding.initialize_to_environment(policy_env_info, self._device)
 
     @property
     def device(self) -> torch.device:
@@ -95,10 +97,10 @@ class TestCheckpointManagerFlows:
     ):
         """During training resume, we need to find the latest checkpoint."""
         for epoch in [1, 5, 10]:
-            write_checkpoint_bundle(
-                (checkpoint_manager.checkpoint_dir / f"{checkpoint_manager.run_name}:v{epoch}").expanduser().resolve(),
-                architecture_spec=mock_policy_architecture.to_spec(),
+            checkpoint_manager.save_policy_checkpoint(
                 state_dict=mock_agent.state_dict(),
+                architecture=mock_policy_architecture,
+                epoch=epoch,
             )
 
         latest = checkpoint_manager.get_latest_checkpoint()
@@ -107,10 +109,10 @@ class TestCheckpointManagerFlows:
 
     def test_trainer_state_save_and_restore(self, checkpoint_manager, mock_agent, mock_policy_architecture):
         """Trainer state must be saved alongside policy for proper resume."""
-        write_checkpoint_bundle(
-            (checkpoint_manager.checkpoint_dir / f"{checkpoint_manager.run_name}:v5").expanduser().resolve(),
-            architecture_spec=mock_policy_architecture.to_spec(),
+        checkpoint_manager.save_policy_checkpoint(
             state_dict=mock_agent.state_dict(),
+            architecture=mock_policy_architecture,
+            epoch=5,
         )
 
         checkpoint_manager.save_trainer_state(
@@ -145,10 +147,10 @@ class TestCheckpointManagerFlows:
     def test_resolve_latest_uri(self, checkpoint_manager, mock_agent, mock_policy_architecture):
         """The :latest suffix is used by eval tools to find the newest checkpoint."""
         for epoch in [1, 7, 3]:
-            write_checkpoint_bundle(
-                (checkpoint_manager.checkpoint_dir / f"{checkpoint_manager.run_name}:v{epoch}").expanduser().resolve(),
-                architecture_spec=mock_policy_architecture.to_spec(),
+            checkpoint_manager.save_policy_checkpoint(
                 state_dict=mock_agent.state_dict(),
+                architecture=mock_policy_architecture,
+                epoch=epoch,
             )
 
         latest_uri = f"file://{checkpoint_manager.checkpoint_dir}:latest"
@@ -157,17 +159,17 @@ class TestCheckpointManagerFlows:
 
     def test_checkpoint_bundle_loads_and_runs(self, checkpoint_manager, mock_agent, mock_policy_architecture):
         """Checkpoint bundle must load and produce actions."""
-        write_checkpoint_bundle(
-            (checkpoint_manager.checkpoint_dir / f"{checkpoint_manager.run_name}:v1").expanduser().resolve(),
-            architecture_spec=mock_policy_architecture.to_spec(),
+        checkpoint_manager.save_policy_checkpoint(
             state_dict=mock_agent.state_dict(),
+            architecture=mock_policy_architecture,
+            epoch=1,
         )
         latest = checkpoint_manager.get_latest_checkpoint()
         assert latest is not None
 
         env_info = PolicyEnvInterface.from_mg_cfg(eb.make_navigation(num_agents=2))
         spec = policy_spec_from_uri(latest)
-        policy = initialize_or_load_policy(env_info, spec)
+        policy = cast(Policy, initialize_or_load_policy(env_info, spec))
 
         obs_shape = env_info.observation_space.shape
         env_obs = torch.zeros((env_info.num_agents, *obs_shape), dtype=torch.uint8)
@@ -195,9 +197,9 @@ class TestCheckpointBundles:
             state_dict=policy.state_dict(),
         )
         spec = policy_spec_from_uri(checkpoint_dir.as_uri())
-        reloaded = initialize_or_load_policy(policy_env_info, spec)
+        reloaded = cast(ActionTestPolicy, initialize_or_load_policy(policy_env_info, spec))
 
-        action_component = reloaded.components["action_embedding"]
+        action_component = cast(ActionEmbedding, reloaded.components["action_embedding"])
         expected_indices = tuple(range(len(policy_env_info.action_names)))
         assert tuple(action_component.active_indices.tolist()) == expected_indices
         assert action_component.num_actions == len(expected_indices)

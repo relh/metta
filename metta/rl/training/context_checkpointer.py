@@ -1,7 +1,7 @@
 """Trainer state checkpoint management component."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 import torch
 
@@ -53,32 +53,26 @@ class ContextCheckpointer(TrainerComponent):
                 )
             else:
                 policy_name = trainable_policy_names[0]
-                raw = self._checkpoint_manager.load_trainer_state(context.latest_policy_uris.get(policy_name))
-                if raw:
+                payload = self._checkpoint_manager.load_trainer_state(context.latest_policy_uris.get(policy_name))
+                if payload:
                     logger.info(
-                        "Restoring trainer state from epoch=%s agent_step=%s", raw.get("epoch"), raw.get("agent_step")
+                        "Restoring trainer state from epoch=%s agent_step=%s",
+                        payload.get("epoch"),
+                        payload.get("agent_step"),
                     )
-                    payload = {
-                        "agent_step": raw.get("agent_step", 0),
-                        "epoch": raw.get("epoch", 0),
-                        "avg_reward": raw.get("avg_reward"),
-                        "stopwatch_state": raw.get("stopwatch_state"),
-                        "curriculum_state": raw.get("curriculum_state"),
-                        "loss_states": raw.get("loss_states", {}),
-                    }
 
         payload = self._distributed.broadcast_from_master(payload)
         if payload is None:
             return
 
-        restored_epoch = payload["epoch"]
-        context.agent_step = payload["agent_step"]
+        restored_epoch = int(payload.get("epoch", 0))
+        context.agent_step = int(payload.get("agent_step", 0))
         context.epoch = restored_epoch
         context.latest_saved_policy_epoch = restored_epoch
 
         total_agents = int(context.experience.total_agents)
         device = context.experience.device
-        default_avg_reward = context.trajectory_isolator.reward_centering_initial_means()
+        default_avg_reward = cast(Any, context).trajectory_isolator.reward_centering_initial_means()
         avg_reward = payload.get("avg_reward")
         if avg_reward is None:
             avg_reward = default_avg_reward

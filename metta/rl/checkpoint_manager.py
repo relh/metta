@@ -17,6 +17,7 @@ from mettagrid.util.uri_resolvers.schemes import resolve_uri
 logger = logging.getLogger(__name__)
 
 OPTIMIZER_STATE_FILENAME = "optimizer_state.pt"
+TRAINER_STATE_FILENAME = "trainer_state.pt"
 
 
 def write_checkpoint_bundle(
@@ -144,9 +145,9 @@ class CheckpointManager:
                     for file_path in checkpoint_dir.rglob("*"):
                         if file_path.is_file():
                             zipf.write(file_path, arcname=file_path.relative_to(checkpoint_dir))
-                    trainer_state_path = self.checkpoint_dir / "trainer_state.pt"
+                    trainer_state_path = self.checkpoint_dir / TRAINER_STATE_FILENAME
                     if trainer_state_path.exists():
-                        zipf.write(trainer_state_path, arcname="trainer_state.pt")
+                        zipf.write(trainer_state_path, arcname=TRAINER_STATE_FILENAME)
                 write_file(remote_zip, str(zip_path), content_type="application/zip")
             finally:
                 zip_path.unlink(missing_ok=True)
@@ -164,12 +165,12 @@ class CheckpointManager:
         )
 
     def load_trainer_state(self, policy_uri: str | None = None) -> Optional[Dict[str, Any]]:
-        trainer_file = self.checkpoint_dir / "trainer_state.pt"
+        trainer_file = self.checkpoint_dir / TRAINER_STATE_FILENAME
         if trainer_file.exists():
             return torch.load(trainer_file, map_location="cpu", weights_only=False)
         return self._load_state_file_from_policy_uri(
             policy_uri,
-            filename="trainer_state.pt",
+            filename=TRAINER_STATE_FILENAME,
             debug_label="trainer state",
         )
 
@@ -183,7 +184,6 @@ class CheckpointManager:
         loss_states: Optional[Dict[str, Any]] = None,
     ):
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        trainer_file = self.checkpoint_dir / "trainer_state.pt"
 
         state: dict[str, Any] = {"epoch": epoch, "agent_step": agent_step}
         if avg_reward is not None:
@@ -195,7 +195,7 @@ class CheckpointManager:
         if loss_states is not None:
             state["loss_states"] = loss_states
 
-        self._atomic_torch_save(self.checkpoint_dir, trainer_file.name, state)
+        self._atomic_torch_save(self.checkpoint_dir, TRAINER_STATE_FILENAME, state)
 
     def _load_state_file_from_policy_uri(
         self,

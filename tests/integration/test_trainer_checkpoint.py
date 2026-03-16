@@ -7,14 +7,15 @@ This verifies that
 3. Policy checkpoints are loadable and consistent
 """
 
-import os
 import shutil
 import tempfile
 from pathlib import Path
+from typing import cast
 
 from metta.agent.policies.fast import FastConfig
+from metta.agent.policy import Policy
 from metta.cogworks.curriculum import Curriculum
-from metta.rl.checkpoint_manager import CheckpointManager
+from metta.rl.checkpoint_manager import TRAINER_STATE_FILENAME, CheckpointManager
 from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import TrainingEnvironmentConfig
@@ -29,7 +30,7 @@ class TestTrainerCheckpointIntegration:
         self.temp_dir = Path(tempfile.mkdtemp())
 
     def teardown_method(self) -> None:
-        if os.path.exists(self.temp_dir):
+        if self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
     def _create_minimal_config(
@@ -65,7 +66,6 @@ class TestTrainerCheckpointIntegration:
         expected_checkpoint_dir = expected_run_dir / "checkpoints"
         assert expected_checkpoint_dir.exists(), "expected_checkpoint_dir was not created"
 
-        print("Starting first training run...")
         self._run_training(
             run_name=run_name,
             trainer_cfg=trainer_cfg,
@@ -74,7 +74,7 @@ class TestTrainerCheckpointIntegration:
             system_cfg=system_cfg,
         )
 
-        trainer_state_path = expected_run_dir / "checkpoints" / "trainer_state.pt"
+        trainer_state_path = expected_run_dir / "checkpoints" / TRAINER_STATE_FILENAME
         assert trainer_state_path.exists(), "Trainer checkpoint was not created"
 
         trainer_state = checkpoint_manager.load_trainer_state()
@@ -91,9 +91,6 @@ class TestTrainerCheckpointIntegration:
 
         first_run_agent_step = trainer_state["agent_step"]
         first_run_epoch = trainer_state["epoch"]
-        print(f"First run completed: agent_step={first_run_agent_step}, epoch={first_run_epoch}")
-
-        print("Starting second training run (resume from checkpoint)...")
         trainer_cfg.total_timesteps = first_run_agent_step + 500
 
         checkpoint_manager_2 = CheckpointManager(run=run_name, system_cfg=system_cfg)
@@ -165,5 +162,5 @@ class TestTrainerCheckpointIntegration:
 
         env_cfg = Curriculum(training_env_cfg.curriculum).get_task().get_env_cfg()
         env_info = PolicyEnvInterface.from_mg_cfg(env_cfg)
-        policy = initialize_or_load_policy(env_info, policy_spec_from_uri(policy_uri))
+        policy = cast(Policy, initialize_or_load_policy(env_info, policy_spec_from_uri(policy_uri)))
         assert policy.state_dict()
