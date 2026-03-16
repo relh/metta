@@ -13,7 +13,6 @@ import threading
 import urllib.parse
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -162,19 +161,11 @@ def _flowchart_options_from_payload(payload: dict[str, Any]) -> dict[str, int] |
     }
 
 
-def _flowchart_export_defaults(config: ChatpropConfig) -> tuple[Path, Path]:
-    export_root = config.state_dir.expanduser() / "cache"
-    return (
-        export_root / DEFAULT_FLOWCHART_EXPORT_RELATIVE_MERMAID,
-        export_root / DEFAULT_FLOWCHART_EXPORT_RELATIVE_JSON,
-    )
-
-
 def _flowchart_payload(
     workflow_graph: dict[str, Any],
     *,
     options: dict[str, int],
-    catalog_generated_at: str | None = None,
+    catalog: dict[str, Any] | None = None,
     session_count: int | None = None,
     branch_count: int | None = None,
 ) -> dict[str, Any]:
@@ -192,28 +183,17 @@ def _flowchart_payload(
         "mermaid": rendered["mermaid"],
         "options": options,
     }
-    if catalog_generated_at:
-        payload["catalog_generated_at"] = catalog_generated_at
+    if catalog is not None and catalog.get("generated_at"):
+        payload["catalog_generated_at"] = catalog["generated_at"]
     if session_count is not None:
         payload["session_count"] = session_count
+    elif catalog is not None and catalog.get("session_count") is not None:
+        payload["session_count"] = catalog["session_count"]
     if branch_count is not None:
         payload["branch_count"] = branch_count
+    elif catalog is not None and catalog.get("branch_count") is not None:
+        payload["branch_count"] = catalog["branch_count"]
     return payload
-
-
-def _flowchart_payload_with_catalog(
-    workflow_graph: dict[str, Any],
-    *,
-    options: dict[str, int],
-    catalog: dict[str, Any] | None,
-) -> dict[str, Any]:
-    return _flowchart_payload(
-        workflow_graph,
-        options=options,
-        catalog_generated_at=(catalog.get("generated_at") if catalog is not None else None),
-        session_count=catalog.get("session_count") if catalog is not None else None,
-        branch_count=catalog.get("branch_count") if catalog is not None else None,
-    )
 
 
 def _parse_output_path(raw_value: Any) -> Path | None:
@@ -1817,13 +1797,6 @@ def build_catalog_snapshot(
     return _build_catalog(resolved, refresh=refresh)
 
 
-@dataclass
-class ServerConfig:
-    host: str
-    port: int
-    base_path: str
-
-
 class ChatPropHTTPServer(ThreadingHTTPServer):
     base_path: str
 
@@ -2059,7 +2032,7 @@ class ChatPropHandler(BaseHTTPRequestHandler):
         if resolved is None:
             return
         workflow_graph, catalog = resolved
-        rendered = _flowchart_payload_with_catalog(workflow_graph, options=options, catalog=catalog)
+        rendered = _flowchart_payload(workflow_graph, options=options, catalog=catalog)
         self._serve_json(rendered)
 
     def _serve_flowchart_save(self) -> None:
@@ -2077,9 +2050,11 @@ class ChatPropHandler(BaseHTTPRequestHandler):
         if resolved is None:
             return
         workflow_graph, catalog = resolved
-        rendered = _flowchart_payload_with_catalog(workflow_graph, options=options, catalog=catalog)
+        rendered = _flowchart_payload(workflow_graph, options=options, catalog=catalog)
 
-        default_mermaid_path, default_json_path = _flowchart_export_defaults(config)
+        export_root = config.state_dir.expanduser() / "cache"
+        default_mermaid_path = export_root / DEFAULT_FLOWCHART_EXPORT_RELATIVE_MERMAID
+        default_json_path = export_root / DEFAULT_FLOWCHART_EXPORT_RELATIVE_JSON
         mermaid_path_raw = payload.get("mermaid_path")
         json_path_raw = payload.get("json_path")
 
@@ -2177,10 +2152,10 @@ class ChatPropHandler(BaseHTTPRequestHandler):
 
 
 def run_server(args: argparse.Namespace) -> None:
-    config = ServerConfig(host=args.host, port=args.port, base_path=_normalize_base_path(args.base_path))
-    server = ChatPropHTTPServer((config.host, config.port), ChatPropHandler)
-    server.base_path = config.base_path
-    endpoint = f"http://{config.host}:{config.port}{config.base_path or ''}"
+    base_path = _normalize_base_path(args.base_path)
+    server = ChatPropHTTPServer((args.host, args.port), ChatPropHandler)
+    server.base_path = base_path
+    endpoint = f"http://{args.host}:{args.port}{base_path or ''}"
     print(f"chatprop: serving on {endpoint}", flush=True)
     with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
