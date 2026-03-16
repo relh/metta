@@ -251,7 +251,7 @@ def _limit_visible_policies(policy_rows: list[BardoPolicy], limit: int) -> list[
     # Always keep active policies visible, then fill remaining slots with a stable sample so the lobby doesn't churn.
     active_policy_rows = [policy for policy in policy_rows if policy.activeJobIds]
     if len(active_policy_rows) >= limit:
-        limited = sorted(active_policy_rows, key=_stable_policy_sample_key)[:limit]
+        limited = active_policy_rows
     else:
         inactive_policy_rows = [policy for policy in policy_rows if not policy.activeJobIds]
         sampled_inactive_policy_rows = sorted(inactive_policy_rows, key=_stable_policy_sample_key)[

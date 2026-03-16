@@ -283,3 +283,78 @@ def test_bardo_world_state_limits_unfiltered_policy_payload(
     assert payload["totalPolicies"] == 55
     assert len(payload["policies"]) == 50
     assert str(active_policy_version_id) in {policy["policyVersionId"] for policy in payload["policies"]}
+
+
+def test_bardo_world_state_keeps_all_active_policies_when_active_set_exceeds_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active_jobs = []
+    policies = []
+    for idx in range(55):
+        policy_version_id = uuid4()
+        policies.append(
+            SimpleNamespace(
+                id=uuid4(),
+                name=f"policy-{idx:03d}",
+                user_id=f"user-{idx:03d}",
+                versions=[
+                    SimpleNamespace(
+                        id=policy_version_id,
+                        version=1,
+                        created_at=datetime(2026, 1, 1, 0, idx % 60, tzinfo=UTC),
+                    ),
+                ],
+            )
+        )
+        active_jobs.append(
+            SimpleNamespace(
+                id=uuid4(),
+                status=JobStatus.running,
+                policy_versions=[SimpleNamespace(policy_version_id=policy_version_id)],
+            )
+        )
+
+    async def fake_fetch_all_policies(name_filter: str | None):
+        assert name_filter is None
+        return policies
+
+    async def fake_fetch_active_episode_jobs(include_active_jobs: bool):
+        assert include_active_jobs is True
+        return active_jobs
+
+    async def fake_resolve_user_names(user_ids: set[str]):
+        return {user_id: user_id for user_id in user_ids}
+
+    async def fake_fetch_canonical_seasons():
+        return []
+
+    async def fake_fetch_pool_player_memberships_for_seasons(season_ids):
+        assert season_ids == []
+        return []
+
+    async def fake_get_softmax_user():
+        return User(id="user-alpha", email="alpha@softmax.com", is_softmax_team_member=True)
+
+    monkeypatch.setattr(bardo_router, "_fetch_all_policies", fake_fetch_all_policies)
+    monkeypatch.setattr(bardo_router, "_fetch_active_episode_jobs", fake_fetch_active_episode_jobs)
+    monkeypatch.setattr(bardo_router, "_resolve_user_names", fake_resolve_user_names)
+    monkeypatch.setattr(bardo_router, "_fetch_canonical_seasons", fake_fetch_canonical_seasons)
+    monkeypatch.setattr(
+        bardo_router,
+        "_fetch_pool_player_memberships_for_seasons",
+        fake_fetch_pool_player_memberships_for_seasons,
+    )
+
+    app = FastAPI()
+    app.include_router(create_bardo_router())
+    app.dependency_overrides[get_softmax_user_or_raise] = fake_get_softmax_user
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get("/bardo/v1/world-state")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["totalPolicies"] == 55
+    assert len(payload["policies"]) == 55
+    returned_policy_ids = {policy["policyId"] for policy in payload["policies"]}
+    assert returned_policy_ids == {str(policy.id) for policy in policies}
