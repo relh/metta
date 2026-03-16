@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DashboardClient, percentileRank } from './DashboardClient'
 import * as api from '../lib/api'
-import type { DashboardResponse, DashboardRolePercentilesResponse } from '../lib/api'
+import type { DashboardEpisode, DashboardResponse, DashboardRolePercentilesResponse } from '../lib/api'
 
 vi.mock('../lib/api', () => ({
   DASHBOARD_API_BASE_URL: 'https://api.policy-dashboard.softmax-research.net',
@@ -27,6 +27,105 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reje
   return { promise, resolve, reject }
 }
 
+const EMPTY_DERIVED = {
+  kpis: {},
+  failures: {},
+  opponent_metrics: {},
+} satisfies DashboardResponse['derived']
+
+const EMPTY_PERCENTILES = {
+  pool_id: 'pool-1',
+  pool_name: 'default',
+  roles: {},
+  rows: [],
+} satisfies DashboardRolePercentilesResponse
+
+const EMPTY_DIAGNOSE_RUNS = { runs: [] } satisfies { runs: api.DiagnoseRunSummary[] }
+
+function buildEpisode(overrides: Partial<DashboardEpisode> = {}): DashboardEpisode {
+  return {
+    episode_id: 'episode-1',
+    status: 'completed',
+    reward: 1,
+    opponent_name: 'opponent',
+    team_composition: 'miner,aligner,scout,scrambler',
+    diagnostic_tags: [],
+    steps: 100,
+    ...overrides,
+  }
+}
+
+function buildDashboardResponse({
+  policyVersionId,
+  generatedAt = '2026-02-24T10:30:00Z',
+  policy = {},
+  episodes = [],
+  derived = {},
+  selection = {},
+  diagnoseRuns,
+}: {
+  policyVersionId: string
+  generatedAt?: string
+  policy?: Partial<DashboardResponse['policy']>
+  episodes?: DashboardEpisode[]
+  derived?: Partial<DashboardResponse['derived']>
+  selection?: Partial<DashboardResponse['selection']>
+  diagnoseRuns?: DashboardResponse['diagnose_runs']
+}): DashboardResponse {
+  const { kpis = {}, failures = {}, opponent_metrics = {}, ...restDerived } = derived
+
+  return {
+    policy: {
+      id: policyVersionId,
+      name: 'glanky',
+      version: 1,
+      rank: 1,
+      score: 1,
+      matches: 1,
+      ...policy,
+    },
+    season: 'beta-cvc',
+    generated_at: generatedAt,
+    episodes,
+    derived: {
+      ...EMPTY_DERIVED,
+      ...restDerived,
+      kpis: { ...EMPTY_DERIVED.kpis, ...kpis },
+      failures: { ...EMPTY_DERIVED.failures, ...failures },
+      opponent_metrics: { ...EMPTY_DERIVED.opponent_metrics, ...opponent_metrics },
+    },
+    selection: {
+      sampled_episode_count: episodes.length,
+      ...selection,
+    },
+    ...(diagnoseRuns === undefined ? {} : { diagnose_runs: diagnoseRuns }),
+  }
+}
+
+function mockDashboardLoad(
+  response: DashboardResponse,
+  {
+    path = `/?policyVersionId=${response.policy.id}`,
+    percentiles = EMPTY_PERCENTILES,
+    diagnoseRuns = EMPTY_DIAGNOSE_RUNS,
+  }: {
+    path?: string
+    percentiles?: DashboardRolePercentilesResponse
+    diagnoseRuns?: { runs: api.DiagnoseRunSummary[] }
+  } = {}
+): void {
+  vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
+  vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce(percentiles)
+  vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue(diagnoseRuns)
+  window.history.replaceState({}, '', path)
+}
+
+async function waitForDashboardLoad(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.queryByRole('progressbar')).toBeNull()
+  })
+}
+
 afterEach(() => {
   cleanup()
   vi.resetAllMocks()
@@ -40,42 +139,21 @@ describe('DashboardClient', () => {
   })
 
   it('toggles replay theater mode with the "t" shortcut', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-theater', name: 'glanky', version: 3, rank: 1, score: 2.1, matches: 8 },
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-theater',
+      generatedAt: '2026-02-25T08:00:00Z',
+      policy: { version: 3, score: 2.1, matches: 8 },
       episodes: [
-        {
-          episode_id: 'episode-1',
-          status: 'completed',
+        buildEpisode({
           reward: 1.2,
           opponent_name: 'opponent-a',
-          team_composition: 'miner,aligner,scout,scrambler',
-          diagnostic_tags: [],
           steps: 123,
           replay_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-        },
+        }),
       ],
-      season: 'beta-cvc',
-      generated_at: '2026-02-25T08:00:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 1,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-theater')
+    mockDashboardLoad(response)
     render(<DashboardClient />)
 
     const replayShell = await screen.findByTestId('replay-spotlight-shell')
@@ -90,42 +168,22 @@ describe('DashboardClient', () => {
   })
 
   it('triggers replay fullscreen with the "f" shortcut and ignores typing contexts', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-fullscreen', name: 'glanky', version: 4, rank: 1, score: 2.4, matches: 9 },
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-fullscreen',
+      generatedAt: '2026-02-25T08:15:00Z',
+      policy: { version: 4, score: 2.4, matches: 9 },
       episodes: [
-        {
+        buildEpisode({
           episode_id: 'episode-2',
-          status: 'completed',
           reward: 1.3,
           opponent_name: 'opponent-b',
-          team_composition: 'miner,aligner,scout,scrambler',
-          diagnostic_tags: [],
           steps: 240,
           replay_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-        },
+        }),
       ],
-      season: 'beta-cvc',
-      generated_at: '2026-02-25T08:15:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 1,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-fullscreen')
+    mockDashboardLoad(response)
     render(<DashboardClient />)
 
     const replayShell = await screen.findByTestId('replay-spotlight-shell')
@@ -145,42 +203,22 @@ describe('DashboardClient', () => {
   })
 
   it('does not block dashboard loading progress on replay spotlight iframe load', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-replay-load', name: 'glanky', version: 5, rank: 1, score: 2.5, matches: 10 },
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-replay-load',
+      generatedAt: '2026-02-25T09:00:00Z',
+      policy: { version: 5, score: 2.5, matches: 10 },
       episodes: [
-        {
+        buildEpisode({
           episode_id: 'episode-replay-load',
-          status: 'completed',
           reward: 1.4,
           opponent_name: 'opponent-c',
-          team_composition: 'miner,aligner,scout,scrambler',
-          diagnostic_tags: [],
           steps: 260,
           replay_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-        },
+        }),
       ],
-      season: 'beta-cvc',
-      generated_at: '2026-02-25T09:00:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 1,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-replay-load')
+    mockDashboardLoad(response)
     render(<DashboardClient />)
 
     expect(await screen.findByRole('progressbar')).toBeTruthy()
@@ -198,30 +236,16 @@ describe('DashboardClient', () => {
   })
 
   it('loads diagnose runs after dashboard data resolves when not embedded', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-prefetch', name: 'glanky', version: 6, rank: 1, score: 2.6, matches: 11 },
-      episodes: [],
-      season: 'beta-cvc',
-      generated_at: '2026-02-25T09:15:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 0,
-      },
-    }
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-prefetch',
+      generatedAt: '2026-02-25T09:15:00Z',
+      policy: { version: 6, score: 2.6, matches: 11 },
+    })
 
     const pendingDashboard = deferred<DashboardResponse>()
     const pendingDiagnoseRuns = deferred<{ runs: api.DiagnoseRunSummary[] }>()
     vi.mocked(api.fetchDashboardData).mockReturnValueOnce(pendingDashboard.promise)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
-    })
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce(EMPTY_PERCENTILES)
     vi.mocked(api.fetchDiagnoseRuns).mockReturnValueOnce(pendingDiagnoseRuns.promise)
 
     window.history.replaceState({}, '', '/?policyVersionId=policy-prefetch')
@@ -245,20 +269,11 @@ describe('DashboardClient', () => {
   })
 
   it('skips diagnose run fetch when dashboard payload embeds diagnose runs', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-embedded-diagnose', name: 'glanky', version: 7, rank: 1, score: 2.7, matches: 12 },
-      episodes: [],
-      season: 'beta-cvc',
-      generated_at: '2026-02-25T09:20:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 0,
-      },
-      diagnose_runs: [
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-embedded-diagnose',
+      generatedAt: '2026-02-25T09:20:00Z',
+      policy: { version: 7, score: 2.7, matches: 12 },
+      diagnoseRuns: [
         {
           run_id: 'embedded-run-1',
           manifest: {
@@ -276,18 +291,9 @@ describe('DashboardClient', () => {
           },
         },
       ],
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-embedded-diagnose')
+    mockDashboardLoad(response)
     render(<DashboardClient />)
 
     await waitFor(() => {
@@ -297,32 +303,14 @@ describe('DashboardClient', () => {
   })
 
   it('does not block dashboard render on parses preload', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'test-policy-id', name: 'glanky', version: 1, rank: 1, score: 1.0, matches: 1 },
-      episodes: [],
-      season: 'beta-cvc',
-      generated_at: '2026-02-24T10:30:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 0,
-      },
-    }
+    const response = buildDashboardResponse({ policyVersionId: 'test-policy-id' })
 
     const pending = deferred<DashboardResponse>()
     const pendingPercentiles = deferred<DashboardRolePercentilesResponse>()
-    const percentiles: DashboardRolePercentilesResponse = {
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
-    }
+    const percentiles: DashboardRolePercentilesResponse = EMPTY_PERCENTILES
     vi.mocked(api.fetchDashboardData).mockReturnValueOnce(pending.promise)
     vi.mocked(api.fetchDashboardRolePercentiles).mockReturnValueOnce(pendingPercentiles.promise)
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue(EMPTY_DIAGNOSE_RUNS)
 
     window.history.replaceState({}, '', '/?policyVersionId=test-policy-id')
     render(<DashboardClient />)
@@ -342,31 +330,15 @@ describe('DashboardClient', () => {
   })
 
   it('preloads parses data after loading the default dashboard policy', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'default-top-policy-uuid', name: 'glanky', version: 2, rank: 1, score: 1.5, matches: 12 },
-      episodes: [],
-      season: 'beta-cvc',
-      generated_at: '2026-02-24T10:35:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 0,
-      },
-    }
-
-    const percentiles: DashboardRolePercentilesResponse = {
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
-    }
+    const response = buildDashboardResponse({
+      policyVersionId: 'default-top-policy-uuid',
+      generatedAt: '2026-02-24T10:35:00Z',
+      policy: { version: 2, score: 1.5, matches: 12 },
+    })
 
     vi.mocked(api.fetchDashboardDefaultData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce(percentiles)
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce(EMPTY_PERCENTILES)
+    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue(EMPTY_DIAGNOSE_RUNS)
 
     render(<DashboardClient />)
 
@@ -376,21 +348,13 @@ describe('DashboardClient', () => {
   })
 
   it('renders the simplified overview pills with merged data-quality status', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-pill-cleanup', name: 'glanky', version: 8, rank: 4, score: 1.7, matches: 22 },
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-pill-cleanup',
+      generatedAt: '2026-03-01T09:20:00Z',
+      policy: { version: 8, rank: 4, score: 1.7, matches: 22 },
       episodes: [
-        {
-          episode_id: 'episode-pill-cleanup-1',
-          status: 'completed',
-          reward: 0.9,
-          opponent_name: 'opponent-z',
-          team_composition: 'miner,aligner,scout,scrambler',
-          diagnostic_tags: [],
-          steps: 180,
-        },
+        buildEpisode({ episode_id: 'episode-pill-cleanup-1', reward: 0.9, opponent_name: 'opponent-z', steps: 180 }),
       ],
-      season: 'beta-cvc',
-      generated_at: '2026-03-01T09:20:00Z',
       derived: {
         kpis: {
           avg_reward: 1.24,
@@ -402,8 +366,6 @@ describe('DashboardClient', () => {
           noop_rate: 0.033,
           reward_consistency: 0,
         },
-        failures: {},
-        opponent_metrics: {},
         instrumentation: {
           compliant: false,
           score: 0.7,
@@ -442,26 +404,12 @@ describe('DashboardClient', () => {
           ],
         },
       },
-      selection: {
-        sampled_episode_count: 1,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-pill-cleanup')
+    mockDashboardLoad(response)
     render(<DashboardClient />)
 
-    await waitFor(() => {
-      expect(screen.queryByRole('progressbar')).toBeNull()
-    })
+    await waitForDashboardLoad()
 
     expect(screen.getByText(/^Data Quality$/)).toBeTruthy()
     expect(screen.getByText(/^Action Success$/)).toBeTruthy()
@@ -484,21 +432,18 @@ describe('DashboardClient', () => {
   })
 
   it('prefers parse-derived reward percentile when available', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-pill-parse-percentile', name: 'glanky', version: 9, rank: 3, score: 2.0, matches: 30 },
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-pill-parse-percentile',
+      generatedAt: '2026-03-02T15:30:00Z',
+      policy: { version: 9, rank: 3, score: 2.0, matches: 30 },
       episodes: [
-        {
+        buildEpisode({
           episode_id: 'episode-pill-parse-percentile-1',
-          status: 'completed',
           reward: 1.6,
           opponent_name: 'opponent-y',
-          team_composition: 'miner,aligner,scout,scrambler',
-          diagnostic_tags: [],
           steps: 200,
-        },
+        }),
       ],
-      season: 'beta-cvc',
-      generated_at: '2026-03-02T15:30:00Z',
       derived: {
         kpis: {
           avg_reward: 1.6,
@@ -506,45 +451,36 @@ describe('DashboardClient', () => {
           junction_control_rate: 0.72,
           noop_rate: 0.02,
         },
-        failures: {},
-        opponent_metrics: {},
       },
-      selection: {
-        sampled_episode_count: 1,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-parse',
-      pool_name: 'default',
-      roles: {},
-      rows: [
-        {
-          role: 'aligner',
-          percentile: 80,
-          details: {
-            metrics: {
-              reward: {
-                percentile: 88.2,
-                avg: 1.6,
-                higher_is_better: true,
-              },
-            },
-            overall_percentile: 80,
-          },
-          updated_at: '2026-03-02T15:30:00Z',
-        },
-      ],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-pill-parse-percentile')
+    mockDashboardLoad(response, {
+      percentiles: {
+        pool_id: 'pool-parse',
+        pool_name: 'default',
+        roles: {},
+        rows: [
+          {
+            role: 'aligner',
+            percentile: 80,
+            details: {
+              metrics: {
+                reward: {
+                  percentile: 88.2,
+                  avg: 1.6,
+                  higher_is_better: true,
+                },
+              },
+              overall_percentile: 80,
+            },
+            updated_at: '2026-03-02T15:30:00Z',
+          },
+        ],
+      },
+    })
     render(<DashboardClient />)
 
-    await waitFor(() => {
-      expect(screen.queryByRole('progressbar')).toBeNull()
-    })
+    await waitForDashboardLoad()
 
     await waitFor(() => {
       expect(screen.getByText('pool reward percentile: P88 (sample P100)')).toBeTruthy()
@@ -552,21 +488,18 @@ describe('DashboardClient', () => {
   })
 
   it('marks missing instrumentation as non-clean data quality', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-pill-missing-inst', name: 'glanky', version: 10, rank: 3, score: 2.0, matches: 30 },
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-pill-missing-inst',
+      generatedAt: '2026-03-02T15:30:00Z',
+      policy: { version: 10, rank: 3, score: 2.0, matches: 30 },
       episodes: [
-        {
+        buildEpisode({
           episode_id: 'episode-pill-missing-inst-1',
-          status: 'completed',
           reward: 1.6,
           opponent_name: 'opponent-y',
-          team_composition: 'miner,aligner,scout,scrambler',
-          diagnostic_tags: [],
           steps: 200,
-        },
+        }),
       ],
-      season: 'beta-cvc',
-      generated_at: '2026-03-02T15:30:00Z',
       derived: {
         kpis: {
           avg_reward: 1.6,
@@ -574,29 +507,20 @@ describe('DashboardClient', () => {
           junction_control_rate: 0.72,
           noop_rate: 0.02,
         },
-        failures: {},
-        opponent_metrics: {},
       },
-      selection: {
-        sampled_episode_count: 1,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-missing-inst',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-pill-missing-inst')
+    mockDashboardLoad(response, {
+      percentiles: {
+        pool_id: 'pool-missing-inst',
+        pool_name: 'default',
+        roles: {},
+        rows: [],
+      },
+    })
     render(<DashboardClient />)
 
-    await waitFor(() => {
-      expect(screen.queryByRole('progressbar')).toBeNull()
-    })
+    await waitForDashboardLoad()
 
     expect(screen.getByText('instrumentation summary missing from payload')).toBeTruthy()
     expect(screen.getByText('0 issues · instrumentation missing')).toBeTruthy()
@@ -721,29 +645,13 @@ describe('DashboardClient', () => {
   })
 
   it('loads pantheon motifs when the Pantheon tab is preselected in the URL', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-pantheon', name: 'glanky', version: 12, rank: 1, score: 3.1, matches: 18 },
-      episodes: [],
-      season: 'beta-cvc',
-      generated_at: '2026-03-05T00:10:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 0,
-      },
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-pantheon',
+      generatedAt: '2026-03-05T00:10:00Z',
+      policy: { version: 12, score: 3.1, matches: 18 },
     })
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+
+    mockDashboardLoad(response, { path: '/?policyVersionId=policy-pantheon&tab=pantheon' })
     vi.mocked(api.fetchPantheonStories).mockResolvedValue({
       generated_at: '2026-03-05T00:10:30Z',
       stories: [
@@ -761,7 +669,6 @@ describe('DashboardClient', () => {
       ],
     })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-pantheon&tab=pantheon')
     render(<DashboardClient />)
 
     await waitFor(() => {
@@ -772,33 +679,13 @@ describe('DashboardClient', () => {
   })
 
   it('does not refetch parse percentiles when switching non-coordination tabs', async () => {
-    const response: DashboardResponse = {
-      policy: { id: 'policy-123', name: 'glanky', version: 2, rank: 1, score: 1.5, matches: 12 },
-      episodes: [],
-      season: 'beta-cvc',
-      generated_at: '2026-02-24T10:35:00Z',
-      derived: {
-        kpis: {},
-        failures: {},
-        opponent_metrics: {},
-      },
-      selection: {
-        sampled_episode_count: 0,
-      },
-    }
+    const response = buildDashboardResponse({
+      policyVersionId: 'policy-123',
+      generatedAt: '2026-02-24T10:35:00Z',
+      policy: { version: 2, score: 1.5, matches: 12 },
+    })
 
-    const percentiles: DashboardRolePercentilesResponse = {
-      pool_id: 'pool-1',
-      pool_name: 'default',
-      roles: {},
-      rows: [],
-    }
-
-    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
-    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce(percentiles)
-    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
-
-    window.history.replaceState({}, '', '/?policyVersionId=policy-123')
+    mockDashboardLoad(response)
     render(<DashboardClient />)
 
     await waitFor(() => {
