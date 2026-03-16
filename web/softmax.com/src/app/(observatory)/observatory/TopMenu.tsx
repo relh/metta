@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   CSSProperties,
+  ComponentProps,
   FC,
   PropsWithChildren,
   use,
@@ -75,6 +76,18 @@ const MenuLink: FC<
       {children}
     </Link>
   );
+};
+
+const VIBESERVATORY_MENU_LINK_PROPS: Pick<
+  ComponentProps<typeof MenuLink>,
+  "activeClassName" | "className" | "inactiveClassName" | "style"
+> = {
+  className: "tracking-wide italic",
+  activeClassName: "border-violet-500 text-violet-500",
+  inactiveClassName: "border-transparent text-violet-400 hover:text-violet-600",
+  style: {
+    fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+  } satisfies CSSProperties,
 };
 
 export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
@@ -152,6 +165,38 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
   const isFreeplayActive = isTournamentRoute && effectiveMode === "freeplay";
   const isTournamentActive =
     isTournamentRoute && effectiveMode === "tournament";
+  const vibeservatoryMenuLinks = [
+    {
+      href: bardoRoute(),
+      isActive: pathname.startsWith("/observatory/bardo"),
+      label: "Bardo",
+    },
+    {
+      href: pantheonRoute(),
+      isActive: pathname.startsWith("/observatory/pantheon"),
+      label: "Pantheon",
+    },
+    {
+      href: policyDashboardRoute(),
+      isActive: pathname.startsWith("/observatory/policy-dashboard"),
+      label: "Dashboard",
+    },
+    {
+      href: diagnoseRoute(),
+      isActive: pathname.startsWith("/observatory/diagnose"),
+      label: "Diagnose",
+    },
+    {
+      href: trainBoardRoute(),
+      isActive: pathname.startsWith("/observatory/train-board"),
+      label: "Train Board",
+    },
+    {
+      href: chatpropRoute(),
+      isActive: pathname.startsWith("/observatory/chatprop"),
+      label: "Chatprop",
+    },
+  ];
 
   return (
     <nav className="border-border-strong bg-surface flex items-start justify-between border-b px-5">
@@ -205,78 +250,16 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
         </div>
         {isSoftmaxTeamMember && (
           <div className="border-border-strong flex border-t">
-            <MenuLink
-              href={bardoRoute()}
-              isActive={pathname.startsWith("/observatory/bardo")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Bardo
-            </MenuLink>
-            <MenuLink
-              href={pantheonRoute()}
-              isActive={pathname.startsWith("/observatory/pantheon")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Pantheon
-            </MenuLink>
-            <MenuLink
-              href={policyDashboardRoute()}
-              isActive={pathname.startsWith("/observatory/policy-dashboard")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Dashboard
-            </MenuLink>
-            <MenuLink
-              href={diagnoseRoute()}
-              isActive={pathname.startsWith("/observatory/diagnose")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Diagnose
-            </MenuLink>
-            <MenuLink
-              href={trainBoardRoute()}
-              isActive={pathname.startsWith("/observatory/train-board")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Train Board
-            </MenuLink>
-            <MenuLink
-              href={chatpropRoute()}
-              isActive={pathname.startsWith("/observatory/chatprop")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Chatprop
-            </MenuLink>
+            {vibeservatoryMenuLinks.map((link) => (
+              <MenuLink
+                key={link.href}
+                href={link.href}
+                isActive={link.isActive}
+                {...VIBESERVATORY_MENU_LINK_PROPS}
+              >
+                {link.label}
+              </MenuLink>
+            ))}
           </div>
         )}
       </div>

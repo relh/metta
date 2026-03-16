@@ -28,6 +28,7 @@ export function SurfaceEmbed({
   iframeTitle,
 }: SurfaceEmbedProps) {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [themedSrc, setThemedSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,7 +81,12 @@ export function SurfaceEmbed({
       return { authToken: nextToken, expiresAtMs };
     };
 
-    const updateThemedSrc = () => setThemedSrc(resolveThemedSrc(authToken));
+    const updateThemedSrc = () => {
+      if (cancelled) {
+        return;
+      }
+      setThemedSrc(resolveThemedSrc(authToken));
+    };
 
     const refreshSessionTokenIfNeeded = async () => {
       if (
@@ -89,21 +95,29 @@ export function SurfaceEmbed({
       )
         return;
       const next = await fetchSessionToken();
+      if (cancelled) {
+        return;
+      }
       authToken = next.authToken;
       authTokenExpiresAtMs = next.expiresAtMs;
       updateThemedSrc();
     };
 
     const bootstrap = async () => {
+      setIsBootstrapping(true);
       setThemedSrc(null);
       setBootstrapError(null);
 
       try {
         const next = await fetchSessionToken();
+        if (cancelled) {
+          return;
+        }
         authToken = next.authToken;
         authTokenExpiresAtMs = next.expiresAtMs;
 
         updateThemedSrc();
+        setIsBootstrapping(false);
 
         observer = new MutationObserver(updateThemedSrc);
         observer.observe(document.documentElement, {
@@ -119,8 +133,8 @@ export function SurfaceEmbed({
         }, TOKEN_REFRESH_CHECK_MS);
       } catch (error) {
         if (!cancelled) {
-          setThemedSrc(resolveThemedSrc(null));
           setBootstrapError(toErrorMessage(error));
+          setIsBootstrapping(false);
         }
       }
     };
@@ -140,10 +154,21 @@ export function SurfaceEmbed({
     serviceName.trim().length > 0 ? serviceName.trim() : "Service";
   const serviceNameLower = resolvedServiceName.toLowerCase();
 
-  if (!themedSrc) {
+  if (isBootstrapping && !themedSrc) {
     return (
       <div className="text-foreground-muted flex h-full w-full items-center justify-center">
         Preparing {serviceNameLower} session...
+      </div>
+    );
+  }
+
+  if (!themedSrc) {
+    return (
+      <div className="flex h-full w-full items-center justify-center px-4">
+        <div className="w-full max-w-xl rounded bg-red-500/15 px-3 py-2 text-sm text-red-500">
+          Unable to prepare {serviceNameLower} authentication:{" "}
+          {bootstrapError ?? "Unknown error"}
+        </div>
       </div>
     );
   }
