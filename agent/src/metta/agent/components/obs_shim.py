@@ -47,6 +47,9 @@ class ObsTokenPadStrip(nn.Module):
         self._remapping_active = False
         self.register_buffer("_positions_cache", torch.empty(0, dtype=torch.int64), persistent=False)
         self._feature_normalizations_override: dict[int, float] | None = None
+        self.feature_id_to_name: dict[int, str] = {}
+        self.feature_normalizations: dict[int, float] = {}
+        self.original_feature_mapping: dict[str, int] | None = None
 
     def feature_normalizations_override(self) -> dict[int, float] | None:
         return self._feature_normalizations_override
@@ -67,6 +70,10 @@ class ObsTokenPadStrip(nn.Module):
             legacy_id += 1
         return legacy_name_to_id, legacy_norms
 
+    def _store_original_feature_mapping(self, mapping: dict[str, int]) -> str:
+        self.original_feature_mapping = mapping
+        return f"Stored original feature mapping with {len(mapping)} features"
+
     def initialize_to_environment(
         self,
         policy_env_info: PolicyEnvInterface,
@@ -75,9 +82,7 @@ class ObsTokenPadStrip(nn.Module):
         # Build feature mappings from policy_env_info.obs_features list
         features_list = list(policy_env_info.obs_features)
         self.feature_id_to_name = {props.id: props.name for props in features_list}
-        self.feature_normalizations = {
-            props.id: props.normalization for props in features_list if hasattr(props, "normalization")
-        }
+        self.feature_normalizations = {props.id: props.normalization for props in features_list}
 
         feature_remap: dict[int, int] = {}
 
@@ -85,9 +90,8 @@ class ObsTokenPadStrip(nn.Module):
             UNKNOWN_FEATURE_ID = 255
             legacy_map, legacy_norms = self._build_legacy_feature_map(features_list)
             stored_log = None
-            if not hasattr(self, "original_feature_mapping"):
-                self.original_feature_mapping = legacy_map
-                stored_log = f"Stored original feature mapping with {len(self.original_feature_mapping)} features"
+            if self.original_feature_mapping is None:
+                stored_log = self._store_original_feature_mapping(legacy_map)
 
             for props in features_list:
                 name = props.name
@@ -109,21 +113,21 @@ class ObsTokenPadStrip(nn.Module):
                 return f"{stored_log}; Created inventory power-token remapping"
             return "Created inventory power-token remapping"
 
-        if not hasattr(self, "original_feature_mapping"):
-            self.original_feature_mapping = {props.name: props.id for props in features_list}
-            return f"Stored original feature mapping with {len(self.original_feature_mapping)} features"
+        if self.original_feature_mapping is None:
+            return self._store_original_feature_mapping({props.name: props.id for props in features_list})
         else:
             # Re-initialization - create remapping for agent portability
             UNKNOWN_FEATURE_ID = 255
             feature_remap = {}
             unknown_features = []
+            original_feature_mapping = self.original_feature_mapping
 
             for props in features_list:
                 name = props.name
                 new_id = props.id
-                if name in self.original_feature_mapping:
+                if name in original_feature_mapping:
                     # Remap known features to their original IDs
-                    original_id = self.original_feature_mapping[name]
+                    original_id = original_feature_mapping[name]
                     if new_id != original_id:
                         feature_remap[new_id] = original_id
                 elif not self.training:
@@ -132,7 +136,7 @@ class ObsTokenPadStrip(nn.Module):
                     unknown_features.append(name)
                 else:
                     # In training mode, learn new features
-                    self.original_feature_mapping[name] = new_id
+                    original_feature_mapping[name] = new_id
 
             if feature_remap:
                 # Apply the remapping
@@ -159,7 +163,7 @@ class ObsTokenPadStrip(nn.Module):
             if feature_id not in mapping and feature_id not in current_feature_ids:
                 remap_tensor[feature_id] = unknown_id
 
-        self.register_buffer("feature_id_remap", remap_tensor.to(device))
+        self.feature_id_remap = remap_tensor
         identity = torch.arange(256, dtype=torch.uint8, device=remap_tensor.device)
         self._remapping_active = not torch.equal(remap_tensor, identity)
 

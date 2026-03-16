@@ -70,6 +70,7 @@ def test_obs_token_pad_strip_training_learns_new_features():
     pad_strip.initialize_to_environment(updated_env, torch.device("cpu"))
 
     remap_table = pad_strip.feature_id_remap
+    assert pad_strip.original_feature_mapping is not None
     assert remap_table[5].item() == 2
     assert "mana" in pad_strip.original_feature_mapping and pad_strip.original_feature_mapping["mana"] == 7
 

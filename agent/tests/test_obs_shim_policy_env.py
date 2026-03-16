@@ -41,9 +41,9 @@ def test_obs_token_pad_strip_initializes_with_policy_env_info():
     log = pad_strip.initialize_to_environment(policy_env_info, device)
 
     assert "Stored original feature mapping" in log
-    assert hasattr(pad_strip, "original_feature_mapping")
-    assert hasattr(pad_strip, "feature_id_to_name")
-    assert hasattr(pad_strip, "feature_normalizations")
+    assert pad_strip.original_feature_mapping is not None
+    assert pad_strip.feature_id_to_name
+    assert pad_strip.feature_normalizations
 
 
 def test_obs_attr_val_norm_initializes_with_policy_env_info():
@@ -68,7 +68,7 @@ def test_obs_shim_tokens_initializes_with_policy_env_info():
     log = obs_shim.initialize_to_environment(policy_env_info, device)
 
     assert log is not None
-    assert hasattr(obs_shim.token_pad_striper, "original_feature_mapping")
+    assert obs_shim.token_pad_striper.original_feature_mapping is not None
 
 
 def test_obs_shim_tokens_forward_pass():

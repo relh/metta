@@ -1,7 +1,7 @@
 import logging
 from collections import OrderedDict
 from contextlib import ExitStack
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import torch
 from tensordict import TensorDict
@@ -10,6 +10,7 @@ from torch.nn.parameter import UninitializedParameter
 from torchrl.data import Composite, UnboundedDiscrete
 
 from metta.agent.policy import Policy, PolicyArchitecture
+from metta.agent.util.torch_backends import build_sdpa_context
 from mettagrid.base_config import Config
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
@@ -60,67 +61,24 @@ class PolicyAutoBuilder(Policy):
         device: torch.device,
     ):
         self.to(device)
+        self._sdpa_context.close()
+        self._sdpa_context = ExitStack()
         if torch.cuda.is_available():
-            self._configure_sdp()
+            context = build_sdpa_context()
+            if context is not None:
+                self._sdpa_context.enter_context(context)
         logs = []
         for value in self.components.values():
-            if hasattr(value, "initialize_to_environment"):
-                logs.append(value.initialize_to_environment(policy_env_info, device))
-        if hasattr(self.action_probs, "initialize_to_environment"):
-            initialize_to_environment = self.action_probs.initialize_to_environment
-            if callable(initialize_to_environment):
-                initialize_to_environment(policy_env_info, device)
+            initialize = getattr(value, "initialize_to_environment", None)
+            if callable(initialize):
+                logs.append(initialize(policy_env_info, device))
+        initialize_action_probs = getattr(self.action_probs, "initialize_to_environment", None)
+        if callable(initialize_action_probs):
+            initialize_action_probs(policy_env_info, device)
 
         for log in logs:
             if log is not None:
                 log_on_master_with_level(logging.DEBUG, log)
-
-    def _configure_sdp(self) -> None:
-        self._sdpa_context.close()
-        self._sdpa_context = ExitStack()
-
-        configured = False
-
-        nn_attention = getattr(torch.nn, "attention", None)
-        sdpa_kernel = getattr(nn_attention, "sdpa_kernel", None)
-
-        if sdpa_kernel is not None and nn_attention is not None:
-            configured = self._enter_sdp_context(
-                sdpa_kernel,
-                backends=[
-                    nn_attention.SDPBackend.FLASH_ATTENTION,
-                    nn_attention.SDPBackend.EFFICIENT_ATTENTION,
-                    nn_attention.SDPBackend.MATH,
-                ],
-            )
-
-        if configured:
-            return
-
-        cuda_backends = getattr(torch.backends, "cuda", None)
-        sdp_kernel = getattr(cuda_backends, "sdp_kernel", None) if cuda_backends else None
-        if callable(sdp_kernel):
-            configured = self._enter_sdp_context(
-                sdp_kernel,
-                enable_flash=True,
-                enable_mem_efficient=True,
-                enable_math=True,
-            )
-
-        if configured or not cuda_backends:
-            return
-
-        for attr in ("enable_flash_sdp", "enable_mem_efficient_sdp", "enable_math_sdp"):
-            fn = getattr(cuda_backends, attr, None)
-            if callable(fn):
-                fn(True)
-
-    def _enter_sdp_context(self, fn, *args, **kwargs) -> bool:
-        try:
-            self._sdpa_context.enter_context(fn(*args, **kwargs))
-            return True
-        except RuntimeError:
-            return False
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
@@ -133,8 +91,9 @@ class PolicyAutoBuilder(Policy):
 
     def reset_memory(self):
         for value in self.components.values():
-            if hasattr(value, "reset_memory"):
-                value.reset_memory()
+            reset_memory = getattr(value, "reset_memory", None)
+            if callable(reset_memory):
+                reset_memory()
 
     @property
     def total_params(self):
@@ -145,8 +104,9 @@ class PolicyAutoBuilder(Policy):
             env_obs=UnboundedDiscrete(shape=torch.Size([200, 3]), dtype=torch.uint8),
         )
         for layer in self.components.values():
-            if hasattr(layer, "get_agent_experience_spec"):
-                spec.update(layer.get_agent_experience_spec())
+            get_agent_experience_spec = getattr(layer, "get_agent_experience_spec", None)
+            if callable(get_agent_experience_spec):
+                spec.update(cast(Composite, get_agent_experience_spec()))
 
         return spec
 
