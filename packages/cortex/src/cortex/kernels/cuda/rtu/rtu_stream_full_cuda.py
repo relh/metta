@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 import torch
+from cortex.utils import autograd_function_vmap_passthrough
 from torch.autograd import Function
 
 from .rtu_seq_full import backward_full, forward_full
@@ -24,7 +25,6 @@ def _act_to_id(name: str) -> int:
 class _RTUStreamFullCUDASeq(Function):
     @staticmethod
     def forward(  # type: ignore[override]
-        ctx,
         x_btd: torch.Tensor,  # [B,T,D]
         nu_log: torch.Tensor,  # [H]
         theta_log: torch.Tensor,  # [H]
@@ -35,7 +35,7 @@ class _RTUStreamFullCUDASeq(Function):
         hc2_init_bh: torch.Tensor,  # [B,H]
         trace_in: Optional[tuple[torch.Tensor, ...]] = None,
         resets_bt: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...], torch.Tensor, torch.Tensor]:
         B, T, D = x_btd.shape
         H = nu_log.shape[0]
         assert Wc1.shape == (D, H) and Wc2.shape == (D, H)
@@ -99,28 +99,6 @@ class _RTUStreamFullCUDASeq(Function):
             act_id,
         )
 
-        ctx.save_for_backward(
-            x_btd,
-            nu_log,
-            theta_log,
-            Wc1,
-            Wc2,
-            pre1_bth,
-            pre2_bth,
-            hc1_init_bh,
-            hc2_init_bh,
-            resets_bt.to(torch.uint8),
-            E_nu_c1_in,
-            E_nu_c2_in,
-            E_th_c1_in,
-            E_th_c2_in,
-            E_W1_c1_in,
-            E_W1_c2_in,
-            E_W2_c1_in,
-            E_W2_c2_in,
-        )
-        ctx.act_id = act_id
-
         trace_out = (
             E_nu_c1_out,
             E_nu_c2_out,
@@ -131,7 +109,49 @@ class _RTUStreamFullCUDASeq(Function):
             E_W2_c1_out,
             E_W2_c2_out,
         )
-        return y_btd_2h, final_hc1_bh, final_hc2_bh, trace_out
+        return y_btd_2h, final_hc1_bh, final_hc2_bh, trace_out, pre1_bth, pre2_bth
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        (
+            x_btd,
+            nu_log,
+            theta_log,
+            Wc1,
+            Wc2,
+            activation_name,
+            hc1_init_bh,
+            hc2_init_bh,
+            trace_in,
+            resets_bt,
+        ) = inputs
+        _y_btd_2h, _final_hc1_bh, _final_hc2_bh, _trace_out, pre1_bth, pre2_bth = output
+        B, T, D = x_btd.shape
+        H = nu_log.shape[0]
+        if resets_bt is None:
+            resets_u8 = torch.zeros(B, T, dtype=torch.uint8, device=x_btd.device)
+        else:
+            if resets_bt.dim() == 1:
+                resets_bt = resets_bt.view(B, 1).expand(B, T)
+            resets_u8 = resets_bt.to(dtype=torch.uint8, device=x_btd.device)
+        if trace_in is None:
+            zeros_bh = torch.zeros(B, H, device=x_btd.device, dtype=x_btd.dtype)
+            zeros_bdh = torch.zeros(B, D, H, device=x_btd.device, dtype=x_btd.dtype)
+            trace_in = (zeros_bh, zeros_bh, zeros_bh, zeros_bh, zeros_bdh, zeros_bdh, zeros_bdh, zeros_bdh)
+        ctx.save_for_backward(
+            x_btd,
+            nu_log,
+            theta_log,
+            Wc1,
+            Wc2,
+            pre1_bth,
+            pre2_bth,
+            hc1_init_bh,
+            hc2_init_bh,
+            resets_u8,
+            *trace_in,
+        )
+        ctx.act_id = _act_to_id(activation_name)
 
     @staticmethod
     def backward(  # type: ignore[override]
@@ -140,6 +160,8 @@ class _RTUStreamFullCUDASeq(Function):
         grad_final_hc1: torch.Tensor,
         grad_final_hc2: torch.Tensor,
         grad_trace_out,
+        _grad_pre1_bth: torch.Tensor,
+        _grad_pre2_bth: torch.Tensor,
     ):
         (
             x_btd,
@@ -207,6 +229,10 @@ class _RTUStreamFullCUDASeq(Function):
             None,
         )
 
+    @staticmethod
+    def vmap(info, in_dims, *args):
+        return autograd_function_vmap_passthrough("rtu_stream_full_cuda", _RTUStreamFullCUDASeq.forward, in_dims, *args)
+
 
 def rtu_stream_full_cuda(
     *,
@@ -225,7 +251,7 @@ def rtu_stream_full_cuda(
 
     Computes streaming RTU with full-rank input weights using fused CUDA kernels.
     """
-    y, h1, h2, trace = _RTUStreamFullCUDASeq.apply(
+    y, h1, h2, trace, _pre1_bth, _pre2_bth = _RTUStreamFullCUDASeq.apply(
         x_btd,
         nu_log,
         theta_log,

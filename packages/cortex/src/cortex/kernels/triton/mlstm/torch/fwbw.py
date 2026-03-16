@@ -8,6 +8,7 @@ import torch
 from cortex.kernels.triton.mlstm.torch.bw import mlstm_chunkwise_bw
 from cortex.kernels.triton.mlstm.torch.fw import mlstm_chunkwise_fw
 from cortex.kernels.triton.mlstm.utils import contiguous
+from cortex.utils import autograd_function_vmap_passthrough
 from torch.amp import custom_bwd, custom_fwd
 
 
@@ -18,7 +19,6 @@ def _mlstm_chunkwise_fwbw_generator(autocast_kernel_dtype=torch.bfloat16) -> Cal
         @custom_fwd(device_type="cuda", cast_inputs=autocast_kernel_dtype)
         @contiguous
         def forward(
-            ctx,
             matQ: torch.Tensor,  # (B, NH, S, DHQK)
             matK: torch.Tensor,  # (B, NH, S, DHQK)
             matV: torch.Tensor,  # (B, NH, S, DHV)
@@ -43,7 +43,17 @@ def _mlstm_chunkwise_fwbw_generator(autocast_kernel_dtype=torch.bfloat16) -> Cal
             num_stages_inter: int | None = None,
             recompute_states_in_bw: bool = True,
             reset_mask: torch.Tensor | None = None,
-        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        ) -> tuple[
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor,
+            torch.Tensor | None,
+            torch.Tensor | None,
+            torch.Tensor | None,
+            torch.Tensor,
+            torch.Tensor,
+        ]:
             B, NH, S, DHQK = matQ.shape
             if qk_scale is None:
                 qk_scale = DHQK**-0.5
@@ -86,8 +96,47 @@ def _mlstm_chunkwise_fwbw_generator(autocast_kernel_dtype=torch.bfloat16) -> Cal
             else:
                 matC_all, vecN_all, scaM_all = (None, None, None)
 
-            # Save tensor inputs for backward; keep scalars on ctx to avoid
-            # Tensor→Python conversions (which cause torch.compile graph breaks).
+            return (
+                matH_out,
+                matC_last,
+                vecN_last,
+                scaM_last,
+                matC_all,
+                vecN_all,
+                scaM_all,
+                vecN_out,
+                vecM_out,
+            )
+
+        @staticmethod
+        def setup_context(ctx, inputs, output):
+            (
+                matQ,
+                matK,
+                matV,
+                vecI,
+                vecF,
+                matC_initial,
+                vecN_initial,
+                scaM_initial,
+                qk_scale,
+                _return_last_states,
+                eps,
+                chunk_size,
+                chunk_size_inter,
+                chunk_size_intra,
+                siz_b_L_parallel,
+                siz_b_L_loop,
+                siz_b_DH_parallel,
+                siz_b_DH_loop,
+                num_warps_intra,
+                num_warps_inter,
+                num_stages_intra,
+                num_stages_inter,
+                _recompute_states_in_bw,
+                reset_mask,
+            ) = inputs
+            _matH_out, _matC_last, _vecN_last, _scaM_last, matC_all, vecN_all, scaM_all, vecN_out, vecM_out = output
             ctx.save_for_backward(
                 matQ,
                 matK,
@@ -103,7 +152,6 @@ def _mlstm_chunkwise_fwbw_generator(autocast_kernel_dtype=torch.bfloat16) -> Cal
                 vecN_out,
                 vecM_out,
             )
-            # Store scalar meta as Python values
             ctx.qk_scale = float(qk_scale)
             ctx.chunk_size = int(chunk_size)
             ctx.chunk_size_inter = None if chunk_size_inter is None else int(chunk_size_inter)
@@ -118,12 +166,22 @@ def _mlstm_chunkwise_fwbw_generator(autocast_kernel_dtype=torch.bfloat16) -> Cal
             ctx.num_stages_inter = None if num_stages_inter is None else int(num_stages_inter)
             ctx.eps = float(eps)
             ctx.reset_mask = reset_mask if isinstance(reset_mask, torch.Tensor) else None
-            return matH_out, matC_last, vecN_last, scaM_last
 
         @staticmethod
         @custom_bwd(device_type="cuda")
         @contiguous
-        def backward(ctx, matDeltaH_out, matDeltaC_last, vecDeltaN_last, scaDeltaM_last):
+        def backward(
+            ctx,
+            matDeltaH_out,
+            matDeltaC_last,
+            vecDeltaN_last,
+            scaDeltaM_last,
+            _grad_matC_all,
+            _grad_vecN_all,
+            _grad_scaM_all,
+            _grad_vecN_out,
+            _grad_vecM_out,
+        ):
             (
                 matQ,
                 matK,
@@ -208,6 +266,15 @@ def _mlstm_chunkwise_fwbw_generator(autocast_kernel_dtype=torch.bfloat16) -> Cal
                 None,  # reset_mask has no gradient
             )
 
+        @staticmethod
+        def vmap(info, in_dims, *args):
+            return autograd_function_vmap_passthrough(
+                "mlstm_chunkwise_fwbw",
+                _mlstm_chunkwise_fwbw.forward,
+                in_dims,
+                *args,
+            )
+
     return _mlstm_chunkwise_fwbw
 
 
@@ -254,7 +321,17 @@ def mlstm_chunkwise__xl_chunk(
     reset_mask: torch.Tensor | None = None,
 ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     _mlstm_chunkwise_fwbw = _get_chunkwise_fwbw_kernel(autocast_kernel_dtype)
-    matH_out, matC_last, vecN_last, scaM_last = _mlstm_chunkwise_fwbw.apply(
+    (
+        matH_out,
+        matC_last,
+        vecN_last,
+        scaM_last,
+        _matC_all,
+        _vecN_all,
+        _scaM_all,
+        _vecN_out,
+        _vecM_out,
+    ) = _mlstm_chunkwise_fwbw.apply(
         q,
         k,
         v,

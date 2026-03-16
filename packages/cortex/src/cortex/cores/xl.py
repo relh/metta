@@ -99,7 +99,26 @@ class XLCore(MemoryCore):
         else:
             mem = torch.zeros(batch, 0, self.d_model, device=device, dtype=dtype)
             mem_seg = torch.zeros(batch, 0, device=device, dtype=torch.long)
-        return TensorDict({"mem": mem, "mem_seg": mem_seg}, batch_size=[batch])
+        state = TensorDict({"mem": mem, "mem_seg": mem_seg}, batch_size=[batch])
+        if isinstance(self.q_proj, AxonLayer):
+            qkv_group = TensorDict({}, batch_size=[batch])
+            qkv_group[self.q_proj.state_path()[1]] = self.q_proj.core.init_state(
+                batch=batch,
+                device=device,
+                dtype=dtype,
+            )
+            qkv_group[self.k_proj.state_path()[1]] = self.k_proj.core.init_state(
+                batch=batch,
+                device=device,
+                dtype=dtype,
+            )
+            qkv_group[self.v_proj.state_path()[1]] = self.v_proj.core.init_state(
+                batch=batch,
+                device=device,
+                dtype=dtype,
+            )
+            state[self.q_proj.state_path()[0]] = qkv_group
+        return state
 
     def forward(
         self,
@@ -232,12 +251,16 @@ class XLCore(MemoryCore):
             # first position of the concatenated sequence to avoid leaking the
             # carried K/V Axon state from prior chunks into the replayed memory.
             dtype_mask = resets_bt.dtype if resets_bt is not None else torch.long
-            resets_kv = torch.zeros(B, L, device=x_seq.device, dtype=dtype_mask)
             if L > 0:
+                resets_head = torch.ones(B, 1, device=x_seq.device, dtype=dtype_mask)
                 if L > 1:
                     changes = seg_full[:, 1:] != seg_full[:, :-1]
-                    resets_kv[:, 1:] = changes.to(dtype_mask)
-                resets_kv[:, 0] = 1  # start-of-mem boundary for K/V replay
+                    resets_tail = changes.to(dtype_mask)
+                else:
+                    resets_tail = torch.zeros(B, 0, device=x_seq.device, dtype=dtype_mask)
+                resets_kv = torch.cat([resets_head, resets_tail], dim=1)
+            else:
+                resets_kv = torch.zeros(B, 0, device=x_seq.device, dtype=dtype_mask)
 
             k_lin = self.k_proj(x_kv, state=parent_state, resets=resets_kv)
             v_lin = self.v_proj(x_kv, state=parent_state, resets=resets_kv)

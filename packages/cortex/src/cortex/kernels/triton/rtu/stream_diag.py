@@ -4,6 +4,7 @@ from typing import Optional, Tuple
 
 import torch
 import triton as _triton  # type: ignore  # noqa: F401
+from cortex.utils import autograd_function_vmap_passthrough
 from torch.autograd import Function
 
 from .utils import hillis_steele_segmented_inplace, scan_step_block_segmented
@@ -56,7 +57,6 @@ def _zeros_like_traces_diag(B: int, H: int, *, device, dtype) -> tuple[torch.Ten
 class _RTUStreamDiagFunction(Function):
     @staticmethod
     def forward(
-        ctx,
         x_btd: torch.Tensor,  # (B,T,D) with D==H
         nu_log: torch.Tensor,  # (H,)
         theta_log: torch.Tensor,  # (H,)
@@ -67,7 +67,17 @@ class _RTUStreamDiagFunction(Function):
         hc2_init_bh: torch.Tensor,  # (B,H)
         trace_in: Optional[tuple[torch.Tensor, ...]] = None,
         resets_bt: Optional[torch.Tensor] = None,  # (B,T) bool or None
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...]]:
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        tuple[torch.Tensor, ...],
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
         if not _TRITON_AVAILABLE:
             raise RuntimeError("Triton not available. Please install `triton` and ensure CUDA is available.")
 
@@ -221,8 +231,23 @@ class _RTUStreamDiagFunction(Function):
             E_w2_c2,
         )
 
+        final_hc1_bh = c1_bth[:, -1, :] if T > 0 else hc1_init_bh
+        final_hc2_bh = c2_bth[:, -1, :] if T > 0 else hc2_init_bh
+        return y_btd_2h, final_hc1_bh, final_hc2_bh, trace_out, c1_bth, c2_bth, g, phi, gamma
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        x_btd, nu_log, theta_log, w1, w2, activation_name, hc1_init_bh, hc2_init_bh, trace_in, resets_bt = inputs
+        _y_btd_2h, _final_hc1_bh, _final_hc2_bh, _trace_out, c1_bth, c2_bth, g, phi, gamma = output
+        B, T, H = x_btd.shape
+        if resets_bt is None:
+            resets_bt = torch.zeros(B, T, dtype=torch.bool, device=x_btd.device)
+        else:
+            if resets_bt.dim() == 1:
+                resets_bt = resets_bt.view(B, 1).expand(B, T)
+            resets_bt = resets_bt.to(dtype=torch.bool, device=x_btd.device)
         if trace_in is None:
-            trace_in = _zeros_like_traces_diag(B, H, device=device, dtype=dtype)
+            trace_in = _zeros_like_traces_diag(B, H, device=x_btd.device, dtype=x_btd.dtype)
         ctx.save_for_backward(
             x_btd,
             nu_log,
@@ -241,10 +266,6 @@ class _RTUStreamDiagFunction(Function):
         )
         ctx.activation_name = activation_name
 
-        final_hc1_bh = c1_bth[:, -1, :] if T > 0 else hc1_init_bh
-        final_hc2_bh = c2_bth[:, -1, :] if T > 0 else hc2_init_bh
-        return y_btd_2h, final_hc1_bh, final_hc2_bh, trace_out
-
     @staticmethod
     def backward(
         ctx,
@@ -252,6 +273,11 @@ class _RTUStreamDiagFunction(Function):
         grad_final_hc1: torch.Tensor,
         grad_final_hc2: torch.Tensor,
         grad_trace_out: Optional[tuple[torch.Tensor, ...]],
+        _grad_c1_bth: torch.Tensor,
+        _grad_c2_bth: torch.Tensor,
+        _grad_g: torch.Tensor,
+        _grad_phi: torch.Tensor,
+        _grad_gamma: torch.Tensor,
     ) -> tuple[Optional[torch.Tensor], ...]:
         (
             x_btd,
@@ -370,6 +396,15 @@ class _RTUStreamDiagFunction(Function):
             None,
         )
 
+    @staticmethod
+    def vmap(info, in_dims, *args):
+        return autograd_function_vmap_passthrough(
+            "rtu_stream_diag_triton",
+            _RTUStreamDiagFunction.forward,
+            in_dims,
+            *args,
+        )
+
 
 def rtu_stream_diag_triton(
     *,
@@ -386,7 +421,7 @@ def rtu_stream_diag_triton(
 ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, ...]]:
     if not _TRITON_AVAILABLE:
         raise RuntimeError("Triton not available. Please install `triton` and ensure CUDA is available.")
-    y, h1, h2, trace_out = _RTUStreamDiagFunction.apply(
+    y, h1, h2, trace_out, _c1_bth, _c2_bth, _g, _phi, _gamma = _RTUStreamDiagFunction.apply(
         x_btd,
         nu_log,
         theta_log,

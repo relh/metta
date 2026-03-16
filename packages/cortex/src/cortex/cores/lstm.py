@@ -11,9 +11,9 @@ from tensordict import TensorDict
 from cortex.config import LSTMCoreConfig
 from cortex.cores.base import MemoryCore
 from cortex.cores.registry import register_core
-from cortex.kernels.pytorch.lstm import lstm_sequence_pytorch
+from cortex.kernels.pytorch.lstm import lstm_sequence_functional, lstm_sequence_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
-from cortex.utils import select_backend
+from cortex.utils import is_batchedtensor, select_backend
 
 
 @register_core(LSTMCoreConfig)
@@ -96,31 +96,43 @@ class LSTMCore(MemoryCore):
         else:
             resets_bt = resets
 
-        backend_kwargs = {
-            "lstm": self.net,
-            "x_seq": x_seq.contiguous(),
-            "h0_bf": h0,
-            "c0_bf": c0,
-            "resets": resets_bt,
-        }
+        if is_batchedtensor(self.net.weight_ih_l0):
+            y_seq, hn_bf, cn_bf = lstm_sequence_functional(
+                x_seq=x_seq.contiguous(),
+                weight_ih=self.net.weight_ih_l0,
+                weight_hh=self.net.weight_hh_l0,
+                bias_ih=self.net.bias_ih_l0 if self.net.bias else None,
+                bias_hh=self.net.bias_hh_l0 if self.net.bias else None,
+                h0_bf=h0,
+                c0_bf=c0,
+                resets=resets_bt,
+            )
+        else:
+            backend_kwargs = {
+                "lstm": self.net,
+                "x_seq": x_seq.contiguous(),
+                "h0_bf": h0,
+                "c0_bf": c0,
+                "resets": resets_bt,
+            }
 
-        # allow_triton = (
-        #     x_seq.is_cuda
-        #     and x_seq.dtype in (torch.float32, torch.float16, torch.bfloat16)
-        #     and self.net.weight_ih_l0.shape[1] == self.cfg.hidden_size
-        #     and self._hidden_size_power_of_two
-        # )
-        # Currently the triton route is disabled until we have faster implementation available.
-        allow_triton = False
+            # allow_triton = (
+            #     x_seq.is_cuda
+            #     and x_seq.dtype in (torch.float32, torch.float16, torch.bfloat16)
+            #     and self.net.weight_ih_l0.shape[1] == self.cfg.hidden_size
+            #     and self._hidden_size_power_of_two
+            # )
+            # Currently the triton route is disabled until we have faster implementation available.
+            allow_triton = False
 
-        backend_fn = select_backend(
-            triton_fn="cortex.kernels.triton.lstm:lstm_sequence_triton" if allow_triton else None,
-            pytorch_fn=lstm_sequence_pytorch,
-            tensor=x_seq,
-            allow_triton=allow_triton,
-        )
+            backend_fn = select_backend(
+                triton_fn="cortex.kernels.triton.lstm:lstm_sequence_triton" if allow_triton else None,
+                pytorch_fn=lstm_sequence_pytorch,
+                tensor=x_seq,
+                allow_triton=allow_triton,
+            )
 
-        y_seq, hn_bf, cn_bf = backend_fn(**backend_kwargs)
+            y_seq, hn_bf, cn_bf = backend_fn(**backend_kwargs)
 
         y = y_seq.squeeze(1) if is_step else y_seq
         new_state = TensorDict({"h": hn_bf, "c": cn_bf}, batch_size=[batch_size])

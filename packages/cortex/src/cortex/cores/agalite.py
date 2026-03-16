@@ -13,8 +13,8 @@ from tensordict import TensorDict
 from cortex.config import AGaLiTeCoreConfig
 from cortex.cores.base import MemoryCore
 from cortex.cores.registry import register_core
+from cortex.kernels.dispatch import run_discounted_sum
 from cortex.types import MaybeState, ResetMask, Tensor
-from cortex.utils import select_backend
 
 
 @register_core(AGaLiTeCoreConfig)
@@ -148,22 +148,24 @@ class AGaLiTeCore(MemoryCore):
         discount_gamma_r = discount_gamma.unsqueeze(2).expand(-1, -1, self.r, -1, -1)
         discount_beta_r = discount_beta.unsqueeze(2).expand(-1, -1, self.r, -1, -1)
 
-        # Select backend for discounted sum
-        allow_cuda = x_seq.is_cuda
-        pytorch_fn = "cortex.kernels.pytorch.agalite:discounted_sum_pytorch"
-        cuda_fn = "cortex.kernels.cuda.agalite.discounted_sum_cuda:discounted_sum_cuda" if allow_cuda else None
-        ds_fn = select_backend(
-            triton_fn=None,
-            pytorch_fn=pytorch_fn,
-            tensor=x_seq,
-            allow_triton=False,
-            cuda_fn=cuda_fn,
-            allow_cuda=allow_cuda,
+        final_keys = run_discounted_sum(
+            start_state=tilde_k_prev,
+            x=keys_osc,
+            discounts=discount_gamma_r,
+            tensor_for_backend=x_seq,
         )
-
-        final_keys = ds_fn(tilde_k_prev, keys_osc, discount_gamma_r)  # [T,B,r,Hh,F]
-        final_values = ds_fn(tilde_v_prev, values_osc, discount_beta_r)  # [T,B,r,Hh,Dh]
-        final_s = ds_fn(s_prev, gated_keys, discount_gamma)  # [T,B,Hh,F]
+        final_values = run_discounted_sum(
+            start_state=tilde_v_prev,
+            x=values_osc,
+            discounts=discount_beta_r,
+            tensor_for_backend=x_seq,
+        )
+        final_s = run_discounted_sum(
+            start_state=s_prev,
+            x=gated_keys,
+            discounts=discount_gamma,
+            tensor_for_backend=x_seq,
+        )
 
         # Attention composition
         keys_dot_queries = torch.einsum("tbrhD,tbhD->tbrh", final_keys, queries_t)

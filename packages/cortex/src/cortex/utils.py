@@ -36,6 +36,51 @@ else:
         TRITON_AVAILABLE = False
 
 
+def is_batchedtensor(tensor: torch.Tensor | None) -> bool:
+    return isinstance(tensor, torch.Tensor) and torch._C._functorch.is_batchedtensor(tensor)
+
+
+def unwrap_batchedtensor(tensor: torch.Tensor) -> tuple[torch.Tensor, int | None]:
+    if not is_batchedtensor(tensor):
+        return tensor, None
+    level = torch._C._functorch.current_level()
+    value, bdim = torch._C._functorch._unwrap_batched(tensor, level)
+    assert bdim is not None
+    return value.movedim(bdim, 0), level
+
+
+def wrap_batchedtensor(tensor: torch.Tensor, level: int | None) -> torch.Tensor:
+    if level is None:
+        return tensor
+    return torch._C._functorch._add_batch_dim(tensor, 0, level)
+
+
+def _flatten_tree(tree):
+    if isinstance(tree, tuple | list):
+        values = []
+        for value in tree:
+            values.extend(_flatten_tree(value))
+        return values
+    return [tree]
+
+
+def _none_tree(tree):
+    if isinstance(tree, tuple):
+        return tuple(_none_tree(value) for value in tree)
+    if isinstance(tree, list):
+        return [_none_tree(value) for value in tree]
+    return None
+
+
+def autograd_function_vmap_passthrough(op_name: str, forward_fn: Callable, in_dims, *args):
+    if any(dim is not None for dim in _flatten_tree(in_dims)):
+        raise RuntimeError(
+            f"{op_name} expects vmapped inputs to be folded into native kernel dimensions before launch."
+        )
+    outputs = forward_fn(*args)
+    return outputs, _none_tree(outputs)
+
+
 def _lazy_import(fn_or_path: Callable | str | None) -> Callable | None:
     """Import a callable from a dotted path if provided."""
     if fn_or_path is None or callable(fn_or_path):
@@ -97,4 +142,11 @@ def select_backend(
     return pytorch_fn_resolved
 
 
-__all__ = ["TRITON_AVAILABLE", "select_backend"]
+__all__ = [
+    "TRITON_AVAILABLE",
+    "autograd_function_vmap_passthrough",
+    "is_batchedtensor",
+    "select_backend",
+    "unwrap_batchedtensor",
+    "wrap_batchedtensor",
+]

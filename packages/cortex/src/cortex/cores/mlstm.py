@@ -13,12 +13,8 @@ from cortex.cores.base import MemoryCore
 from cortex.cores.conv import CausalConv1dCore
 from cortex.cores.core import AxonLayer, update_parent_state
 from cortex.cores.registry import register_core
-from cortex.kernels.pytorch.mlstm import (
-    mlstm_chunkwise_simple,
-    mlstm_recurrent_step_stabilized_simple,
-)
+from cortex.kernels.dispatch import apply_multihead_layernorm, run_mlstm
 from cortex.types import MaybeState, ResetMask, Tensor
-from cortex.utils import select_backend
 
 
 def bias_linspace_init_(param: torch.Tensor, start: float = 3.4, end: float = 6.0) -> torch.Tensor:
@@ -42,21 +38,12 @@ class MultiHeadLayerNorm(nn.Module):
         self.ndim = ndim
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        assert input.dim() == 4, "Input must be 4D tensor (B, NH, S, DH)"
-        B, NH, S, DH = input.shape
-
-        gn_in_1 = input.transpose(1, 2)  # (B, S, NH, DH)
-        gn_in_2 = gn_in_1.reshape(B * S, NH * DH)  # (B * S, NH * DH)
-        out = torch.nn.functional.group_norm(
-            gn_in_2,
-            num_groups=NH,
+        return apply_multihead_layernorm(
+            input,
             weight=self.weight,
             bias=self.bias,
             eps=self.eps,
         )
-        # (B * S), (NH * DH) -> (B, S, NH, DH) -> (B, NH, S, DH)
-        out = out.view(B, S, NH, DH).transpose(1, 2)
-        return out
 
     def reset_parameters(self):
         if self.weight is not None:
@@ -176,6 +163,20 @@ class mLSTMCore(MemoryCore):
         # Combine all states
         combined_state = TensorDict({"c": c_state, "n": n_state, "m": m_state}, batch_size=[B])
         combined_state.update(conv_state)  # Add conv state
+        if self.cfg.use_axon_layer:
+            gate_group = TensorDict({}, batch_size=[B])
+            gate_group[self.igate.state_path()[1]] = self.igate.core.init_state(batch=B, device=device, dtype=dtype)
+            gate_group[self.fgate.state_path()[1]] = self.fgate.core.init_state(batch=B, device=device, dtype=dtype)
+            combined_state[self.igate.state_path()[0]] = gate_group
+        if self.cfg.use_axon_qkv:
+            qkv_group = TensorDict({}, batch_size=[B])
+            qkv_group[self.qk_layer.state_path()[1]] = self.qk_layer.core.init_state(
+                batch=B,
+                device=device,
+                dtype=dtype,
+            )
+            qkv_group[self.v_layer.state_path()[1]] = self.v_layer.core.init_state(batch=B, device=device, dtype=dtype)
+            combined_state[self.qk_layer.state_path()[0]] = qkv_group
         return combined_state
 
     def forward(
@@ -254,77 +255,29 @@ class mLSTMCore(MemoryCore):
             fgate_preact = self.fgate(if_gate_input)  # [B, T, NH]
         igate_preact = igate_preact.transpose(-1, -2)  # [B, NH, T]
         fgate_preact = fgate_preact.transpose(-1, -2)  # [B, NH, T]
-
-        if is_step:
-            # Single step recurrent processing
-            igate_preact = igate_preact.unsqueeze(-1)  # [B, NH, T, 1]
-            fgate_preact = fgate_preact.unsqueeze(-1)  # [B, NH, T, 1]
-
-            # Prepare a step reset mask if provided
-            reset_step: Optional[torch.Tensor]
-            if resets is None:
-                reset_step = None
-            else:
-                # Accept [B] or [B, 1] and convert to [B]
-                reset_step = resets.view(B)
-
-            # Step mode always uses PyTorch (no Triton step kernel)
-            h_state, (c_new, n_new, m_new) = mlstm_recurrent_step_stabilized_simple(
-                c_state=c_state,
-                n_state=n_state,
-                m_state=m_state,
-                q=q,
-                k=k,
-                v=v,
-                igate_preact=igate_preact,
-                fgate_preact=fgate_preact,
-                reset_mask=reset_step,
-            )
-            new_state = TensorDict({"c": c_new, "n": n_new, "m": m_new}, batch_size=[B])
-            if conv_state_new is not None:
-                new_state.update(conv_state_new)
-            # Preserve any auxiliary substates (e.g., AxonLayer groups written into `st`)
-            update_parent_state(new_state, st)
-        else:
-            # Sequence processing
-            # Normalize resets to (B, T) if provided
-            rm = None
-            if resets is not None:
-                if resets.dim() == 1:
-                    rm = torch.zeros(B, T, dtype=resets.dtype, device=x.device)
-                    rm[:, 0] = resets
-                else:
-                    rm = resets
-
-            backend_fn = select_backend(
-                triton_fn="cortex.kernels.triton.mlstm:mlstm_chunkwise_triton",
-                pytorch_fn=mlstm_chunkwise_simple,
-                tensor=x,
-                allow_triton=True,
-            )
-            h_state, (c_new, n_new, m_new) = backend_fn(
-                queries=q,
-                keys=k,
-                values=v,
-                igate_preact=igate_preact,
-                fgate_preact=fgate_preact,
-                initial_C=c_state,
-                initial_n=n_state,
-                initial_m=m_state,
-                reset_mask=rm,
-                chunk_size=self.cfg.chunk_size,
-                return_last_state=True,
-            )
-            # Attach conv buffer after sequence for continuity across calls
-            new_state = TensorDict({"c": c_new, "n": n_new, "m": m_new}, batch_size=[B])
-            if conv_state_new is not None:
-                new_state.update(conv_state_new)
-            # Preserve any auxiliary substates (e.g., AxonLayer groups written into `st`)
-            update_parent_state(new_state, st)
-
-        # Apply output normalization
-        h_state_norm = self.outnorm(h_state)  # [B, NH, T, DH]
-        h_state_norm = h_state_norm.transpose(1, 2).reshape(B, T, -1)  # [B, T, H]
+        h_state_norm, (c_new, n_new, m_new) = run_mlstm(
+            queries=q,
+            keys=k,
+            values=v,
+            igate_preact=igate_preact,
+            fgate_preact=fgate_preact,
+            c_state=c_state,
+            n_state=n_state,
+            m_state=m_state,
+            resets=resets,
+            hidden_size=H,
+            num_heads=self.cfg.num_heads,
+            head_dim=self.head_dim,
+            chunk_size=self.cfg.chunk_size,
+            outnorm_weight=self.outnorm.weight,
+            outnorm_bias=self.outnorm.bias,
+            outnorm_eps=self.outnorm.eps,
+            is_step=is_step,
+        )
+        new_state = TensorDict({"c": c_new, "n": n_new, "m": m_new}, batch_size=[B])
+        if conv_state_new is not None:
+            new_state.update(conv_state_new)
+        update_parent_state(new_state, st)
 
         # Return in original shape
         if is_step:

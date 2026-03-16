@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Optional, Tuple
 
 import torch
@@ -13,13 +12,10 @@ from cortex.config import CausalConv1dCoreConfig, sLSTMCoreConfig
 from cortex.cores.base import MemoryCore
 from cortex.cores.conv import CausalConv1dCore
 from cortex.cores.core import AxonLayer, update_parent_state
-
-# Reuse utilities from mLSTM for normalization and init
 from cortex.cores.mlstm import MultiHeadLayerNorm, bias_linspace_init_
 from cortex.cores.registry import register_core
-from cortex.kernels.pytorch.slstm import slstm_sequence_pytorch
+from cortex.kernels.dispatch import run_slstm_sequence
 from cortex.types import MaybeState, ResetMask, Tensor
-from cortex.utils import select_backend
 
 
 class _HeadwiseLinearExpand(nn.Module):
@@ -142,6 +138,11 @@ class sLSTMCore(MemoryCore):
         if self.conv1d_core is not None:
             conv_state = self.conv1d_core.init_state(batch=B, device=device, dtype=dtype)
             td.update(conv_state)
+        if self.cfg.use_axon_layer:
+            group = TensorDict({}, batch_size=[B])
+            group[self.if_fused.state_path()[1]] = self.if_fused.core.init_state(batch=B, device=device, dtype=dtype)
+            group[self.zo_fused.state_path()[1]] = self.zo_fused.core.init_state(batch=B, device=device, dtype=dtype)
+            td[self.if_fused.state_path()[0]] = group
         return td
 
     def _apply_conv(
@@ -160,21 +161,6 @@ class sLSTMCore(MemoryCore):
         # Sequence mode: pass through as-is
         y, new_conv_state = self.conv1d_core(x_seq, conv_state, resets=resets)
         return self.conv_act(y), new_conv_state  # type: ignore[arg-type]
-
-    def _normalize_output(self, y_seq: Tensor) -> Tensor:
-        # y_seq: [B, T, H] or [B, H]
-        is_step = y_seq.dim() == 2
-        if is_step:
-            y = y_seq.view(y_seq.shape[0], self.num_heads, 1, self.head_dim)
-            y = self.dropout(y)
-            y = self.outnorm(y).view(y_seq.shape[0], -1)
-            return y
-        else:
-            B, T, H = y_seq.shape
-            y = y_seq.view(B, T, self.num_heads, self.head_dim).transpose(1, 2)
-            y = self.dropout(y)
-            y = self.outnorm(y).transpose(1, 2).reshape(B, T, H)
-            return y
 
     def forward(
         self,
@@ -273,33 +259,21 @@ class sLSTMCore(MemoryCore):
         n0 = n_prev.view(B, NH, DH)
         m0 = m_prev.view(B, NH, DH)
         states0 = torch.stack((y0, c0, n0, m0), dim=0)
-
-        # Triton kernels use tensor-core `tl.dot` paths which can exceed shared-memory limits
-        # for very large per-head dimensions; fall back to PyTorch in that case.
-        allow_triton = self.head_dim >= 16 and (self.head_dim & (self.head_dim - 1)) == 0 and self.head_dim <= 512
-        logging.debug(f"head_dim: {self.head_dim}, allow_triton: {allow_triton}, is_step: {is_step}")
-        backend_fn = select_backend(
-            triton_fn="cortex.kernels.triton.slstm:slstm_sequence_triton",
-            pytorch_fn=slstm_sequence_pytorch,
-            tensor=x_seq,
-            allow_triton=allow_triton,
-        )
-
-        all_states, last_state = backend_fn(
+        y_out, (y_t, c_t, n_t, m_t) = run_slstm_sequence(
             Wx=Wx_seq,
             R=R,
             b=b,
             initial_states=states0,
             resets=kernel_resets,
+            hidden_size=H,
+            num_heads=NH,
+            head_dim=DH,
+            outnorm_weight=self.outnorm.weight,
+            outnorm_bias=self.outnorm.bias,
+            outnorm_eps=self.outnorm.eps,
+            dropout=self.dropout,
+            is_step=is_step,
         )
-
-        # Extract outputs from kernel results
-        # all_states: (T, 4, B, NH, DH); last_state: (4, B, NH, DH)
-        y_seq = all_states[:, 0].permute(1, 0, 2, 3).reshape(B, T, H)
-        y_t = last_state[0].reshape(B, H)
-        c_t = last_state[1].reshape(B, H)
-        n_t = last_state[2].reshape(B, H)
-        m_t = last_state[3].reshape(B, H)
 
         # Create new state and preserve AxonLayer-managed substates
         new_state = TensorDict({"y": y_t, "c": c_t, "n": n_t, "m": m_t}, batch_size=[B])
@@ -309,9 +283,6 @@ class sLSTMCore(MemoryCore):
         # inside the parent state ``st``. Carry that substate forward explicitly.
         if self.cfg.use_axon_layer:
             update_parent_state(new_state, st)
-
-        # Apply normalization and dropout
-        y_out = self._normalize_output(y_seq)
 
         if is_step:
             return y_out.squeeze(1) if y_out.dim() == 3 else y_out, new_state

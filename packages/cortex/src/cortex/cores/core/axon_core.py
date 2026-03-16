@@ -17,11 +17,10 @@ from cortex.config import AxonCoreConfig
 from cortex.cores.base import MemoryCore
 from cortex.cores.registry import register_core
 from cortex.kernels.cuda import srht_cuda
-from cortex.kernels.pytorch.rtu.rtu_stream_diag import rtu_stream_diag_pytorch
-from cortex.kernels.pytorch.rtu.rtu_stream_fullrank import rtu_stream_full_pytorch
+from cortex.kernels.dispatch import run_axon_rtu
 from cortex.kernels.pytorch.srht import srht_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
-from cortex.utils import select_backend
+from cortex.utils import is_batchedtensor, unwrap_batchedtensor, wrap_batchedtensor
 
 
 def _resolve_activation(name: str) -> nn.Module:
@@ -232,6 +231,7 @@ class AxonCore(MemoryCore):
 
         # Pack carried traces (if present)
         trace_in = self._pack_trace_in(st)
+        act_name = self.activation.__class__.__name__
 
         # Optional untraced linear input projection or SRHT mixer before kernel
         if getattr(self, "_use_untraced_linear", False):
@@ -240,74 +240,48 @@ class AxonCore(MemoryCore):
             Hh = self.hidden_size
             perm = None if self.srht_perm.numel() == 0 else self.srht_perm.to(device=x_btd.device)
             signs = self.srht_signs.to(device=x_btd.device, dtype=x_btd.dtype)
-            if x_btd.is_cuda and (Hh & (Hh - 1)) == 0:
+            if is_batchedtensor(signs):
+                signs = unwrap_batchedtensor(signs)[0][0]
+            if perm is not None and is_batchedtensor(perm):
+                perm = unwrap_batchedtensor(perm)[0][0]
+            if is_batchedtensor(x_btd):
+                x_phys, x_level = unwrap_batchedtensor(x_btd)
+                E = x_phys.shape[0]
+                x_flat = x_phys.reshape(E * B, T, H)
+                if x_flat.is_cuda and (Hh & (Hh - 1)) == 0:
+                    x_flat = srht_cuda(x_flat, signs, perm, normalize=True)
+                else:
+                    x_flat = srht_pytorch(x_flat, signs, perm, normalize=True)
+                x_btd = wrap_batchedtensor(x_flat.reshape(E, B, T, H), x_level)
+            elif x_btd.is_cuda and (Hh & (Hh - 1)) == 0:
                 x_btd = srht_cuda(x_btd, signs, perm, normalize=True)
             else:
                 x_btd = srht_pytorch(x_btd, signs, perm, normalize=True)
 
-        # Select kernel functions and build kwargs based on mode
-        act_name = self.activation.__class__.__name__
-
-        if self._use_fullrank:
-            # Full-rank: only PyTorch and CUDA available (no Triton)
-            triton_fn = None
-            pytorch_fn = rtu_stream_full_pytorch
-            cuda_fn = "cortex.kernels.cuda.rtu:rtu_stream_full_cuda"
-            kernel_kwargs = {
-                "x_btd": x_btd,
-                "nu_log": self.nu_log,
-                "theta_log": self.theta_log,
-                "Wc1": self.Wc1,
-                "Wc2": self.Wc2,
-                "activation_name": act_name,
-                "hc1_init_bh": hc1,
-                "hc2_init_bh": hc2,
-                "trace_in": trace_in,
-                "resets_bt": resets_bt,
-            }
-        else:
-            # Diagonal: all three backends available
-            triton_fn = "cortex.kernels.triton.rtu:rtu_stream_diag_triton"
-            pytorch_fn = rtu_stream_diag_pytorch
-            cuda_fn = "cortex.kernels.cuda.rtu:rtu_stream_diag_cuda"
-            kernel_kwargs = {
-                "x_btd": x_btd,
-                "nu_log": self.nu_log,
-                "theta_log": self.theta_log,
-                "w1": self.w1,
-                "w2": self.w2,
-                "activation_name": act_name,
-                "hc1_init_bh": hc1,
-                "hc2_init_bh": hc2,
-                "trace_in": trace_in,
-                "resets_bt": resets_bt,
-            }
-
-        # Backend selection (select_backend handles None automatically)
-        prefer_cuda = x_btd.is_cuda and (T <= int(self.cfg.cuda_seq_threshold))
-        kernel_fn = select_backend(
-            triton_fn=triton_fn,
-            pytorch_fn=pytorch_fn,
-            tensor=x_btd,
-            cuda_fn=cuda_fn,
-            allow_cuda=prefer_cuda,
+        y, h1_n, h2_n, trace_out = run_axon_rtu(
+            x_btd=x_btd,
+            nu_log=self.nu_log,
+            theta_log=self.theta_log,
+            hc1_init_bh=hc1,
+            hc2_init_bh=hc2,
+            trace_in=trace_in,
+            resets_bt=resets_bt,
+            activation_name=act_name,
+            out_weight=self.out_proj.weight,
+            out_bias=self.out_proj.bias,
+            use_fullrank=self._use_fullrank,
+            prefer_cuda=x_btd.is_cuda and (T <= int(self.cfg.cuda_seq_threshold)),
+            is_step=is_step,
+            w1=None if self._use_fullrank else self.w1,
+            w2=None if self._use_fullrank else self.w2,
+            Wc1=self.Wc1 if self._use_fullrank else None,
+            Wc2=self.Wc2 if self._use_fullrank else None,
         )
-
-        # Single kernel call
-        y2h_t, (h1_n, h2_n), trace_out = kernel_fn(**kernel_kwargs)
 
         # Update state and traces
         st["hc1"] = h1_n
         st["hc2"] = h2_n
         self._unpack_trace_out(st, trace_out)
-
-        # Project 2H -> out_dim (batch-first)
-        if is_step:
-            y2h = y2h_t.squeeze(1)
-            y = self.out_proj(y2h)
-        else:
-            y2h_flat = y2h_t.reshape(B * T, -1)
-            y = self.out_proj(y2h_flat).reshape(B, T, self._out_dim)
 
         # Enforce block contract if requested
         if self._enforce_out_dim_eq_hidden and y.shape[-1] != self.hidden_size:

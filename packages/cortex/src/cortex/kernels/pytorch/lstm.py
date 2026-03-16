@@ -12,6 +12,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 def _validate_inputs(
@@ -93,4 +94,56 @@ def lstm_sequence_pytorch(
     return y_seq, hn_bf, cn_bf
 
 
-__all__ = ["lstm_sequence_pytorch"]
+def lstm_sequence_functional(
+    *,
+    x_seq: torch.Tensor,
+    weight_ih: torch.Tensor,
+    weight_hh: torch.Tensor,
+    bias_ih: torch.Tensor | None,
+    bias_hh: torch.Tensor | None,
+    h0_bf: torch.Tensor,
+    c0_bf: torch.Tensor,
+    resets: Optional[torch.Tensor] = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    _validate_inputs(x_seq, h0_bf, c0_bf, resets)
+
+    if h0_bf.shape[1] != 1 or c0_bf.shape[1] != 1:
+        raise ValueError("Functional LSTM path only supports a single layer")
+
+    B, T, H = x_seq.shape
+    h_t = h0_bf[:, 0, :]
+    c_t = c0_bf[:, 0, :]
+    outputs = []
+
+    bias = None
+    if bias_ih is not None and bias_hh is not None:
+        bias = bias_ih + bias_hh
+    elif bias_ih is not None:
+        bias = bias_ih
+    elif bias_hh is not None:
+        bias = bias_hh
+
+    for t in range(T):
+        if resets is not None:
+            mask_b = resets[:, t].to(dtype=h_t.dtype).view(B, 1)
+            h_t = h_t * (1.0 - mask_b)
+            c_t = c_t * (1.0 - mask_b)
+
+        gates = F.linear(x_seq[:, t, :], weight_ih, bias) + F.linear(h_t, weight_hh)
+        i_t, f_t, g_t, o_t = gates.chunk(4, dim=-1)
+        i_t = torch.sigmoid(i_t)
+        f_t = torch.sigmoid(f_t)
+        g_t = torch.tanh(g_t)
+        o_t = torch.sigmoid(o_t)
+
+        c_t = f_t * c_t + i_t * g_t
+        h_t = o_t * torch.tanh(c_t)
+        outputs.append(h_t)
+
+    y_seq = torch.stack(outputs, dim=1)
+    hn_bf = h_t.unsqueeze(1)
+    cn_bf = c_t.unsqueeze(1)
+    return y_seq, hn_bf, cn_bf
+
+
+__all__ = ["lstm_sequence_functional", "lstm_sequence_pytorch"]

@@ -12,6 +12,7 @@ from typing import Optional
 import torch
 import triton
 import triton.language as tl
+from cortex.utils import autograd_function_vmap_passthrough
 
 _TORCH_TO_TRITON_DTYPE = {
     torch.float16: tl.float16,
@@ -370,7 +371,6 @@ class _ChannelMixCausalResetFn(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx,
         state: torch.Tensor,
         x: torch.Tensor,
         w: torch.Tensor,
@@ -430,21 +430,27 @@ class _ChannelMixCausalResetFn(torch.autograd.Function):
 
         y = y_full[:, KS:, :]
 
+        return y
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        state, x, w, bias, resets, block_t, block_fi, block_fo, reduce_t = inputs
+        B, KS, _FI = state.shape
+        resets = resets.contiguous()
+        resets_prefix = torch.zeros((B, KS), dtype=resets.dtype, device=resets.device)
+        seg = _make_seg(torch.cat([resets_prefix, resets], dim=1))
         ctx.save_for_backward(
-            state_prefix,
+            state.contiguous(),
             x,
             w,
             seg,
-            (bias if bias is not None else torch.empty(0, device=x.device, dtype=x.dtype)),
+            bias if bias is not None else torch.empty(0, device=x.device, dtype=x.dtype),
         )
-        ctx.has_bias = HAS_BIAS
+        ctx.has_bias = bias is not None
         ctx.block_t = block_t
         ctx.block_fi = block_fi
         ctx.block_fo = block_fo
         ctx.reduce_t = reduce_t
-        ctx.KS = KS
-        ctx.T = T
-        return y
 
     @staticmethod
     def backward(ctx, gy: torch.Tensor):
@@ -533,6 +539,15 @@ class _ChannelMixCausalResetFn(torch.autograd.Function):
             gb = None
 
         return gx_state, gx, gw, gb, None, None, None, None, None
+
+    @staticmethod
+    def vmap(info, in_dims, *args):
+        return autograd_function_vmap_passthrough(
+            "channelmix_causal_conv1d_with_resets_triton",
+            _ChannelMixCausalResetFn.forward,
+            in_dims,
+            *args,
+        )
 
 
 def channelmix_causal_conv1d_with_resets_triton(
