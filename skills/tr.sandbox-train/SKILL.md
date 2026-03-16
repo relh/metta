@@ -43,7 +43,7 @@ uv run sky exec "$CLUSTER" --gpus L4:4 -- \
 ```
 
 If you have approval to wipe sandbox-local changes, use `git checkout -f`, `git reset --hard`, and `git clean -fd`
-before the branch checkout.
+before the branch checkout. Prefer separate `sky exec` commands; `bash -lc 'a && b && c'` is brittle here.
 
 3. Dry-run the exact distributed launch shape first:
 
@@ -63,7 +63,9 @@ uv run sky exec "$CLUSTER" --gpus L4:4 -- \
   variants.1=no_objective
 ```
 
-Use indexed overrides like `variants.0=... variants.1=...`; quoted JSON lists can be mangled by `sky exec`.
+Use indexed overrides like `variants.0=... variants.1=...`; quoted JSON lists can be mangled by `sky exec`. Always pass
+`--gpus L4:4` on the dry-run / launch task. Without a task GPU reservation, editable CUDA builds like `pufferlib-core`
+can fail while inferring arch flags.
 
 4. Launch detached with an explicit `MASTER_PORT`:
 
@@ -93,6 +95,9 @@ uv run sky logs "$CLUSTER" <job_id>
 Do not trust SkyPilot `SUCCEEDED` alone. The wrapper can exit cleanly even when inner training failed. Keep reading
 until you see real startup signals such as distributed ranks bound to `cuda:0..N`, policy creation / DDP wrapping,
 rank-0 config save, W&B init, or early training progress.
+
+On SkyPilot distributed runs, `config.json` may show `evaluator.evaluate_local=false`. Sandbox training will not
+validate isolated checkpoint loading; use a separate local smoke or explicit eval command for that path.
 
 ## Quick Reference
 
