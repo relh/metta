@@ -326,6 +326,29 @@ class DebugHarness:
         """Get all objects of a specific type."""
         return [obj for obj in self.get_grid_objects().values() if obj.get("type_name") == type_name]
 
+    def object_inventory(self, type_name: str, team_name: str | None = None) -> dict[str, int]:
+        """Get a grid object's inventory by type, optionally scoped to a team tag."""
+        objects = self.get_objects_by_type(type_name)
+        if team_name is not None:
+            tag_id = self._tag_id(f"team:{team_name}")
+            objects = [obj for obj in objects if obj["has_tag"](tag_id)]
+        if not objects:
+            return {}
+        if len(objects) != 1:
+            raise ValueError(
+                f"Expected exactly one {type_name!r} object"
+                + (f" for team {team_name!r}" if team_name is not None else "")
+                + f", found {len(objects)}"
+            )
+
+        resource_names = self.sim.resource_names
+        raw_inv = objects[0]["inventory"]
+        return {resource_names[idx]: amount for idx, amount in raw_inv.items() if amount != 0}
+
+    def _tag_id(self, tag_name: str) -> int:
+        tag_names = self.env_cfg.game.id_map().tag_names()
+        return {name: idx for idx, name in enumerate(tag_names)}[tag_name]
+
     def get_object_types(self) -> dict[str, int]:
         """Get count of each object type in simulation."""
         types: dict[str, int] = {}

@@ -66,7 +66,7 @@ def run_audit(
         role_counts: Counter[str] = Counter()
         adjacent_roles = {role: False for role in GEAR_COSTS}
 
-        hub_inv = harness.object_inventory("hub")
+        hub_inv = harness.object_inventory("hub", team_name="cogs")
         available_roles = {
             role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()

@@ -157,7 +157,7 @@ def run_rollout(
 
     for _ in range(steps):
         harness.step(1)
-        hub_inv = harness.object_inventory("hub")
+        hub_inv = harness.object_inventory("hub", team_name="cogs")
         gear_resources_available = {
             role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()
