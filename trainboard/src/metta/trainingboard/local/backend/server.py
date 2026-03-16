@@ -9,6 +9,7 @@ import os
 import sys
 import time
 import urllib.parse
+from collections.abc import Callable
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -104,22 +105,32 @@ def _discover_repo_cache_dir() -> Optional[Path]:
     return None
 
 
-def default_repo_cache_path(state_dir: Optional[Path] = None) -> Path:
+def _default_repo_cache_path(
+    file_name: str,
+    *,
+    state_dir: Optional[Path],
+    state_path_for_dir: Callable[[Path], Path],
+) -> Path:
     repo_cache_dir = _discover_repo_cache_dir()
     if repo_cache_dir is not None:
-        return repo_cache_dir / DEFAULT_REPO_CACHE_FILE_NAME
-    if state_dir is None:
-        state_dir = DEFAULT_STATE_DIR
-    return cache_path_for_state_dir(state_dir)
+        return repo_cache_dir / file_name
+    return state_path_for_dir(state_dir or DEFAULT_STATE_DIR)
+
+
+def default_repo_cache_path(state_dir: Optional[Path] = None) -> Path:
+    return _default_repo_cache_path(
+        DEFAULT_REPO_CACHE_FILE_NAME,
+        state_dir=state_dir,
+        state_path_for_dir=cache_path_for_state_dir,
+    )
 
 
 def default_repo_llm_cache_path(state_dir: Optional[Path] = None) -> Path:
-    repo_cache_dir = _discover_repo_cache_dir()
-    if repo_cache_dir is not None:
-        return repo_cache_dir / DEFAULT_REPO_LLM_CACHE_FILE_NAME
-    if state_dir is None:
-        state_dir = DEFAULT_STATE_DIR
-    return llm_cache_path_for_state_dir(state_dir)
+    return _default_repo_cache_path(
+        DEFAULT_REPO_LLM_CACHE_FILE_NAME,
+        state_dir=state_dir,
+        state_path_for_dir=llm_cache_path_for_state_dir,
+    )
 
 
 def _prefer_newer_cache(state_path: Path, repo_path: Path) -> Path:
@@ -197,8 +208,8 @@ def build_board_payload_for_state_dir(state_dir: Path) -> dict:
     return {
         "dashboard": build_dashboard_for_state_dir(state_dir),
         "task_ranking": build_task_ranking_for_state_dir(state_dir),
-        "pipeline": build_pipeline_snapshot_for_state_dir(state_dir),
-        "pipeline_audit": build_pipeline_audit_for_state_dir(state_dir),
+        "pipeline": build_pipeline_snapshot(),
+        "pipeline_audit": build_pipeline_audit(),
         "research_funnel": build_research_funnel_for_state_dir(state_dir),
     }
 
@@ -218,7 +229,7 @@ def _wandb_per_state_limit() -> int:
     return max(10, min(1000, numeric_limit))
 
 
-def build_pipeline_snapshot_for_state_dir(_state_dir: Path) -> dict:
+def build_pipeline_snapshot() -> dict:
     if not _wandb_metrics_enabled():
         return TrainingPipelineSnapshot.unavailable(
             source="wandb_state_samples",
@@ -258,7 +269,7 @@ def build_pipeline_snapshot_for_state_dir(_state_dir: Path) -> dict:
     return payload
 
 
-def build_pipeline_audit_for_state_dir(_state_dir: Path) -> dict:
+def build_pipeline_audit() -> dict:
     now_monotonic = time.monotonic()
     global _pipeline_audit_cache_payload, _pipeline_audit_cache_expires_at
     if _pipeline_audit_cache_payload is not None and now_monotonic < _pipeline_audit_cache_expires_at:
@@ -381,11 +392,11 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
             return
 
         if request_path == "/api/v1/pipeline":
-            self._write_json(200, build_pipeline_snapshot_for_state_dir(self.server.state_dir))
+            self._write_json(200, build_pipeline_snapshot())
             return
 
         if request_path == "/api/v1/pipeline-audit":
-            self._write_json(200, build_pipeline_audit_for_state_dir(self.server.state_dir))
+            self._write_json(200, build_pipeline_audit())
             return
 
         if request_path == "/api/v1/research-funnel":

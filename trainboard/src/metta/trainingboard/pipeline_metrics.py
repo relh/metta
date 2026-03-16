@@ -588,9 +588,13 @@ def _discover_repo_root() -> Path:
     raise RuntimeError(msg)
 
 
-def _extract_assignment_string(text: str, name: str, *, default: str) -> str:
+def _assignment_match(text: str, name: str) -> re.Match[str] | None:
     pattern = re.compile(_ASSIGNMENT_PATTERN_TEMPLATE.format(name=re.escape(name)), re.MULTILINE)
-    match = pattern.search(text)
+    return pattern.search(text)
+
+
+def _extract_assignment_string(text: str, name: str, *, default: str) -> str:
+    match = _assignment_match(text, name)
     if match is None:
         return default
     raw = match.group("value").strip()
@@ -601,8 +605,7 @@ def _extract_assignment_string(text: str, name: str, *, default: str) -> str:
 
 
 def _extract_assignment_int(text: str, name: str, *, default: int) -> int:
-    pattern = re.compile(_ASSIGNMENT_PATTERN_TEMPLATE.format(name=re.escape(name)), re.MULTILINE)
-    match = pattern.search(text)
+    match = _assignment_match(text, name)
     if match is None:
         return default
     raw = match.group("value").replace("_", "")

@@ -83,8 +83,7 @@ def create_trainboard_router() -> APIRouter:
 
     @router.get("/api/v1/pipeline-audit")
     async def trainboard_pipeline_audit() -> dict[str, Any]:
-        state_dir = Path(trainboard_server.DEFAULT_STATE_DIR).expanduser()
-        return trainboard_server.build_pipeline_audit_for_state_dir(state_dir)
+        return trainboard_server.build_pipeline_audit()
 
     @router.post("/api/v1/recompute")
     async def trainboard_recompute(_: dict[str, Any] | None = None) -> dict[str, Any]:

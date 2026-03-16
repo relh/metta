@@ -9,8 +9,8 @@ from metta.trainingboard.local.backend.server import (
     _resolve_frontend_target,
     build_board_payload_for_state_dir,
     build_dashboard_for_state_dir,
-    build_pipeline_audit_for_state_dir,
-    build_pipeline_snapshot_for_state_dir,
+    build_pipeline_audit,
+    build_pipeline_snapshot,
     build_task_ranking_for_state_dir,
     cache_path_for_state_dir,
     dashboard_cache_path_for_state_dir,
@@ -123,11 +123,11 @@ def test_build_board_payload_for_state_dir_contains_dashboard_and_ranking(
     server_module._pipeline_audit_cache_payload = None
     server_module._pipeline_audit_cache_expires_at = 0.0
     pipeline_payload = {"available": True, "experiments": {"running_now": 2}}
-    monkeypatch.setattr(server_module, "build_pipeline_snapshot_for_state_dir", lambda _state_dir: pipeline_payload)
+    monkeypatch.setattr(server_module, "build_pipeline_snapshot", lambda: pipeline_payload)
     monkeypatch.setattr(
         server_module,
-        "build_pipeline_audit_for_state_dir",
-        lambda _state_dir: {"supports_multi_policy_training": True},
+        "build_pipeline_audit",
+        lambda: {"supports_multi_policy_training": True},
     )
     payload = build_board_payload_for_state_dir(tmp_path)
     assert "dashboard" in payload
@@ -145,8 +145,8 @@ def test_pipeline_and_funnel_routes_respect_base_path(monkeypatch, tmp_path: Pat
     pipeline_payload = {"available": True, "experiments": {"running_now": 2}}
     audit_payload = {"supports_multi_policy_training": True}
     funnel_payload = {"tasks_total": 4, "stages": {"paper_selected": 3}}
-    monkeypatch.setattr(server_module, "build_pipeline_snapshot_for_state_dir", lambda _state_dir: pipeline_payload)
-    monkeypatch.setattr(server_module, "build_pipeline_audit_for_state_dir", lambda _state_dir: audit_payload)
+    monkeypatch.setattr(server_module, "build_pipeline_snapshot", lambda: pipeline_payload)
+    monkeypatch.setattr(server_module, "build_pipeline_audit", lambda: audit_payload)
     monkeypatch.setattr(server_module, "build_research_funnel_for_state_dir", lambda _state_dir: funnel_payload)
 
     class _StubHandler:
@@ -178,15 +178,15 @@ def test_pipeline_and_funnel_routes_respect_base_path(monkeypatch, tmp_path: Pat
     assert off_prefix_handler.responses == [(404, {"error": "not found"})]
 
 
-def test_build_pipeline_audit_for_state_dir_has_canonical_keys(tmp_path: Path) -> None:
-    payload = build_pipeline_audit_for_state_dir(tmp_path)
+def test_build_pipeline_audit_has_canonical_keys() -> None:
+    payload = build_pipeline_audit()
     assert payload["supports_multi_policy_training"] is True
     assert "cogsguard_train_defaults" in payload
     assert "launch_reliability" in payload
     assert "loss_inventory" in payload
 
 
-def test_pipeline_snapshot_returns_unavailable_when_wandb_fetch_fails(monkeypatch, tmp_path: Path) -> None:
+def test_pipeline_snapshot_returns_unavailable_when_wandb_fetch_fails(monkeypatch) -> None:
     monkeypatch.setenv(server_module.WANDB_ENABLE_ENV, "1")
     monkeypatch.setattr(server_module, "_pipeline_cache_payload", None)
     monkeypatch.setattr(server_module, "_pipeline_cache_key", None)
@@ -197,13 +197,13 @@ def test_pipeline_snapshot_returns_unavailable_when_wandb_fetch_fails(monkeypatc
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("simulated wandb failure")),
     )
 
-    payload = build_pipeline_snapshot_for_state_dir(tmp_path)
+    payload = build_pipeline_snapshot()
     assert payload["available"] is False
     assert "Pipeline metrics unavailable" in payload["notes"][0]
     assert "simulated wandb failure" in payload["notes"][0]
 
 
-def test_pipeline_audit_returns_degraded_payload_when_build_fails(monkeypatch, tmp_path: Path) -> None:
+def test_pipeline_audit_returns_degraded_payload_when_build_fails(monkeypatch) -> None:
     monkeypatch.setattr(server_module, "_pipeline_audit_cache_payload", None)
     monkeypatch.setattr(server_module, "_pipeline_audit_cache_expires_at", 0.0)
     monkeypatch.setattr(
@@ -212,7 +212,7 @@ def test_pipeline_audit_returns_degraded_payload_when_build_fails(monkeypatch, t
         lambda: (_ for _ in ()).throw(RuntimeError("simulated pipeline audit failure")),
     )
 
-    payload = build_pipeline_audit_for_state_dir(tmp_path)
+    payload = build_pipeline_audit()
     assert payload["supports_multi_policy_training"] is False
     assert payload["cogsguard_train_defaults"]["command"] == "-"
     assert payload["multi_policy"]["supported"] is False
