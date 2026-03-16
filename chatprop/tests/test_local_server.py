@@ -13,6 +13,7 @@ from metta.chatprop.local.backend.server import (
     _extract_session_cwd,
     _flowchart_options_from_payload,
     _normalize_closed_pr_record,
+    _normalize_merged_pr_record,
     _normalize_uploaded_snapshot_payload,
     _parse_archived_session_id,
     _parse_output_path,
@@ -231,6 +232,35 @@ def test_normalize_closed_pr_record_marks_landed_via_closed_main_match() -> None
     assert normalized["mergedAt"] == "2026-02-27T18:24:22Z"
     assert normalized["closedAt"] == "2026-02-27T18:24:22Z"
     assert normalized["landedVia"] == "closed_pr_number_on_main"
+
+
+def test_normalize_merged_pr_record_trims_repo_metadata() -> None:
+    normalized = _normalize_merged_pr_record(
+        {
+            "number": 5678,
+            "title": "  Cleanup flowchart payloads  ",
+            "url": "  https://github.com/Metta-AI/metta/pull/5678  ",
+            "mergedAt": " 2026-02-28T01:02:03Z ",
+            "closedAt": " 2026-02-28T01:03:00Z ",
+            "headRefName": " relh/cleanup-chatprop-flowchart ",
+            "baseRefName": " main ",
+            "updatedAt": " 2026-02-28T01:04:00Z ",
+            "repository": {
+                "name": " metta ",
+                "nameWithOwner": " Metta-AI/metta ",
+            },
+        }
+    )
+    assert normalized is not None
+    assert normalized["title"] == "Cleanup flowchart payloads"
+    assert normalized["url"] == "https://github.com/Metta-AI/metta/pull/5678"
+    assert normalized["mergedAt"] == "2026-02-28T01:02:03Z"
+    assert normalized["closedAt"] == "2026-02-28T01:03:00Z"
+    assert normalized["headRefName"] == "relh/cleanup-chatprop-flowchart"
+    assert normalized["baseRefName"] == "main"
+    assert normalized["updatedAt"] == "2026-02-28T01:04:00Z"
+    assert normalized["repositoryName"] == "metta"
+    assert normalized["repositoryNameWithOwner"] == "Metta-AI/metta"
 
 
 def test_flowchart_options_from_payload_defaults() -> None:

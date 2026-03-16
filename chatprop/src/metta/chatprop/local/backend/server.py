@@ -21,7 +21,7 @@ from typing import Any
 from metta.chatprop.analyze import build_analysis_context, run_analysis
 from metta.chatprop.config import ChatpropConfig, load_config
 from metta.chatprop.local.flowchart_core import (
-    render_mermaid_flowchart,
+    build_flowchart_payload,
     write_flowchart_outputs,
 )
 from metta.chatprop.local.indexer import (
@@ -169,31 +169,22 @@ def _flowchart_payload(
     session_count: int | None = None,
     branch_count: int | None = None,
 ) -> dict[str, Any]:
-    rendered = render_mermaid_flowchart(
+    catalog_generated_at = None
+    if catalog is not None:
+        if isinstance(catalog.get("generated_at"), str):
+            catalog_generated_at = catalog["generated_at"]
+        if session_count is None and isinstance(catalog.get("session_count"), int):
+            session_count = catalog["session_count"]
+        if branch_count is None and isinstance(catalog.get("branch_count"), int):
+            branch_count = catalog["branch_count"]
+    return build_flowchart_payload(
         workflow_graph,
-        min_node_count=options["min_node_count"],
-        min_edge_count=options["min_edge_count"],
-        max_nodes=options["max_nodes"],
-        max_edges=options["max_edges"],
+        **options,
+        catalog_generated_at=catalog_generated_at,
+        session_count=session_count,
+        branch_count=branch_count,
+        options=options,
     )
-    payload: dict[str, Any] = {
-        "generated_at": _iso_utc(datetime.now(tz=UTC)),
-        "workflow_graph": workflow_graph,
-        "selected_graph": rendered["selected_graph"],
-        "mermaid": rendered["mermaid"],
-        "options": options,
-    }
-    if catalog is not None and catalog.get("generated_at"):
-        payload["catalog_generated_at"] = catalog["generated_at"]
-    if session_count is not None:
-        payload["session_count"] = session_count
-    elif catalog is not None and catalog.get("session_count") is not None:
-        payload["session_count"] = catalog["session_count"]
-    if branch_count is not None:
-        payload["branch_count"] = branch_count
-    elif catalog is not None and catalog.get("branch_count") is not None:
-        payload["branch_count"] = catalog["branch_count"]
-    return payload
 
 
 def _parse_output_path(raw_value: Any) -> Path | None:
@@ -734,77 +725,60 @@ def _merged_since_date(updated_at: str | None) -> str | None:
     return parsed.date().isoformat()
 
 
-def _normalize_merged_pr_record(record: dict[str, Any]) -> dict[str, Any] | None:
-    head_ref_name = record.get("headRefName")
-    if not isinstance(head_ref_name, str) or not head_ref_name.strip():
+def _record_string(record: dict[str, Any], key: str) -> str | None:
+    raw = record.get(key)
+    if not isinstance(raw, str):
         return None
-    merged_at = record.get("mergedAt")
-    if not isinstance(merged_at, str) or not merged_at.strip():
-        return None
+    value = raw.strip()
+    return value or None
+
+
+def _normalize_pr_repository_names(repository: Any) -> tuple[str | None, str | None]:
+    if not isinstance(repository, dict):
+        return None, None
+    return _record_string(repository, "nameWithOwner"), _record_string(repository, "name")
+
+
+def _normalize_pr_record(
+    record: dict[str, Any],
+    *,
+    merged_key: str,
+    landed_via: str | None = None,
+) -> dict[str, Any] | None:
+    head_ref_name = _record_string(record, "headRefName")
+    merged_at = _record_string(record, merged_key)
     number = record.get("number")
-    if not isinstance(number, int):
+    if head_ref_name is None or merged_at is None or not isinstance(number, int):
         return None
 
-    repository = record.get("repository")
-    repository_name_with_owner = None
-    repository_name = None
-    if isinstance(repository, dict):
-        raw_full = repository.get("nameWithOwner")
-        raw_name = repository.get("name")
-        if isinstance(raw_full, str) and raw_full.strip():
-            repository_name_with_owner = raw_full.strip()
-        if isinstance(raw_name, str) and raw_name.strip():
-            repository_name = raw_name.strip()
-
-    return {
+    repository_name_with_owner, repository_name = _normalize_pr_repository_names(record.get("repository"))
+    normalized: dict[str, Any] = {
         "number": number,
-        "title": record.get("title") if isinstance(record.get("title"), str) else None,
-        "url": record.get("url") if isinstance(record.get("url"), str) else None,
+        "title": _record_string(record, "title"),
+        "url": _record_string(record, "url"),
         "mergedAt": merged_at,
-        "closedAt": (record.get("closedAt") if isinstance(record.get("closedAt"), str) else None),
-        "headRefName": head_ref_name.strip(),
-        "baseRefName": (record.get("baseRefName") if isinstance(record.get("baseRefName"), str) else None),
-        "updatedAt": (record.get("updatedAt") if isinstance(record.get("updatedAt"), str) else None),
+        "closedAt": _record_string(record, "closedAt"),
+        "headRefName": head_ref_name,
+        "baseRefName": _record_string(record, "baseRefName"),
+        "updatedAt": _record_string(record, "updatedAt"),
         "repositoryNameWithOwner": repository_name_with_owner,
         "repositoryName": repository_name,
     }
+    if landed_via is not None:
+        normalized["landedVia"] = landed_via
+    return normalized
+
+
+def _normalize_merged_pr_record(record: dict[str, Any]) -> dict[str, Any] | None:
+    return _normalize_pr_record(record, merged_key="mergedAt")
 
 
 def _normalize_closed_pr_record(record: dict[str, Any]) -> dict[str, Any] | None:
-    head_ref_name = record.get("headRefName")
-    if not isinstance(head_ref_name, str) or not head_ref_name.strip():
-        return None
-    closed_at = record.get("closedAt")
-    if not isinstance(closed_at, str) or not closed_at.strip():
-        return None
-    number = record.get("number")
-    if not isinstance(number, int):
-        return None
-
-    repository = record.get("repository")
-    repository_name_with_owner = None
-    repository_name = None
-    if isinstance(repository, dict):
-        raw_full = repository.get("nameWithOwner")
-        raw_name = repository.get("name")
-        if isinstance(raw_full, str) and raw_full.strip():
-            repository_name_with_owner = raw_full.strip()
-        if isinstance(raw_name, str) and raw_name.strip():
-            repository_name = raw_name.strip()
-
-    return {
-        "number": number,
-        "title": record.get("title") if isinstance(record.get("title"), str) else None,
-        "url": record.get("url") if isinstance(record.get("url"), str) else None,
-        "mergedAt": closed_at,
-        "closedAt": closed_at,
-        "headRefName": head_ref_name.strip(),
-        "baseRefName": (record.get("baseRefName") if isinstance(record.get("baseRefName"), str) else None),
-        "updatedAt": (record.get("updatedAt") if isinstance(record.get("updatedAt"), str) else None),
-        "repositoryNameWithOwner": repository_name_with_owner,
-        "repositoryName": repository_name,
-        "landedVia": "closed_pr_number_on_main",
-    }
+    return _normalize_pr_record(
+        record,
+        merged_key="closedAt",
+        landed_via="closed_pr_number_on_main",
+    )
 
 
 def _search_pr_records_via_github_api(

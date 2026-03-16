@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -137,6 +138,42 @@ def render_mermaid_flowchart(
         "mermaid": "\n".join(lines) + "\n",
         "selected_graph": selected_graph,
     }
+
+
+def build_flowchart_payload(
+    graph: dict[str, Any],
+    *,
+    min_node_count: int = 1,
+    min_edge_count: int = 1,
+    max_nodes: int = 100,
+    max_edges: int = 250,
+    catalog_generated_at: str | None = None,
+    session_count: int | None = None,
+    branch_count: int | None = None,
+    options: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    rendered = render_mermaid_flowchart(
+        graph,
+        min_node_count=min_node_count,
+        min_edge_count=min_edge_count,
+        max_nodes=max_nodes,
+        max_edges=max_edges,
+    )
+    payload: dict[str, Any] = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "workflow_graph": graph,
+        "selected_graph": rendered["selected_graph"],
+        "mermaid": rendered["mermaid"],
+    }
+    if options is not None:
+        payload["options"] = options
+    if catalog_generated_at:
+        payload["catalog_generated_at"] = catalog_generated_at
+    if session_count is not None:
+        payload["session_count"] = session_count
+    if branch_count is not None:
+        payload["branch_count"] = branch_count
+    return payload
 
 
 def write_flowchart_outputs(
