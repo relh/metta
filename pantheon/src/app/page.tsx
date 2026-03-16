@@ -69,7 +69,7 @@ export default function PantheonPage() {
         </section>
       ) : error ? (
         <section className="card">
-          <p style={{ margin: 0, color: '#b42318' }}>
+          <p className="pantheon-error" style={{ margin: 0 }}>
             <strong>Error:</strong> {error}
           </p>
         </section>
@@ -93,7 +93,9 @@ export default function PantheonPage() {
                       <span>{story.source ?? 'unknown'}</span>
                     </div>
                     <p style={{ margin: 0 }}>{story.motif}</p>
-                    <p style={{ margin: 0, color: '#5b7294', fontSize: 13 }}>{story.summary}</p>
+                    <p className="pantheon-story-summary" style={{ margin: 0 }}>
+                      {story.summary}
+                    </p>
                     <p className="pantheon-story-meta">
                       policy <code>{story.policy}</code>
                       {story.run_id ? (

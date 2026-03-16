@@ -5,6 +5,18 @@
   --surface: #ffffff;
   --fg: #111827;
   --border: #e5e7eb;
+  --muted-fg: #536c90;
+  --summary-fg: #5b7294;
+  --story-surface: #ffffff;
+  --story-border: #d8e2ef;
+  --fame-surface: #eff6ff;
+  --fame-border: #9dc9ff;
+  --same-surface: #f5f0ff;
+  --same-border: #cfb9ff;
+  --lame-surface: #fff1f2;
+  --lame-border: #ffc4c4;
+  --link: #1d4ed8;
+  --error-fg: #b42318;
 }
 
 :root[data-theme='dark'] {
@@ -13,6 +25,18 @@
   --surface: #111827;
   --fg: #f3f4f6;
   --border: #374151;
+  --muted-fg: #9db0cc;
+  --summary-fg: #b5c4da;
+  --story-surface: #172133;
+  --story-border: #314159;
+  --fame-surface: #0f1d2e;
+  --fame-border: #4f83c2;
+  --same-surface: #1f1730;
+  --same-border: #8c72d1;
+  --lame-surface: #2b1519;
+  --lame-border: #c86b78;
+  --link: #9dc9ff;
+  --error-fg: #ff8b7d;
 }
 
 * {
@@ -23,6 +47,10 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
+}
+
+a {
+  color: var(--link);
 }
 
 main {
@@ -55,18 +83,18 @@ main {
 }
 
 .pantheon-hall-fame {
-  border-color: #9dc9ff;
-  background: #eff6ff;
+  border-color: var(--fame-border);
+  background: var(--fame-surface);
 }
 
 .pantheon-hall-same {
-  border-color: #cfb9ff;
-  background: #f5f0ff;
+  border-color: var(--same-border);
+  background: var(--same-surface);
 }
 
 .pantheon-hall-lame {
-  border-color: #ffc4c4;
-  background: #fff1f2;
+  border-color: var(--lame-border);
+  background: var(--lame-surface);
 }
 
 .pantheon-hall-head {
@@ -78,16 +106,16 @@ main {
 
 .pantheon-hall-head span {
   font-size: 12px;
-  color: #536c90;
+  color: var(--muted-fg);
 }
 
 .pantheon-story-card {
   display: grid;
   gap: 6px;
-  border: 1px solid #d8e2ef;
+  border: 1px solid var(--story-border);
   border-radius: 10px;
   padding: 10px;
-  background: #fff;
+  background: var(--story-surface);
 }
 
 .pantheon-story-head {
@@ -99,12 +127,21 @@ main {
 
 .pantheon-story-head span {
   font-size: 12px;
-  color: #5f7392;
+  color: var(--muted-fg);
+}
+
+.pantheon-story-summary {
+  color: var(--summary-fg);
+  font-size: 13px;
 }
 
 .pantheon-story-meta,
 .pantheon-story-tags {
   margin: 0;
   font-size: 12px;
-  color: #5f7392;
+  color: var(--muted-fg);
+}
+
+.pantheon-error {
+  color: var(--error-fg);
 }
