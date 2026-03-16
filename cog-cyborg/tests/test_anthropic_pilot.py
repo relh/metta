@@ -111,7 +111,17 @@ def _directive_policy_source(
         lines.extend(
             [
                 f"    if sdk.state.step == {review_step}:",
-                f'        sdk.log.request_review("{trigger_name}", "Switch roles.", target="policy")',
+                "        sdk.log.write(",
+                "            LogRecord(",
+                '                level="warning",',
+                '                message="Switch roles.",',
+                "                step=sdk.state.step,",
+                (
+                    f'                review=ReviewRequest(trigger_name="{trigger_name}", '
+                    'prompt="Switch roles.", target="policy"),'
+                ),
+                "            )",
+                "        )",
             ]
         )
     if role == "miner":
@@ -377,7 +387,7 @@ def test_anthropic_pilot_session_does_not_regress_objective_after_aligner_pressu
     assert len(fake_client.messages.calls) == 1
 
 
-def test_anthropic_pilot_session_applies_runtime_review_requests() -> None:
+def test_anthropic_pilot_session_applies_runtime_review_logs() -> None:
     fake_client = _FakeClient(
         [
             _review_response(_directive_policy_source(note="opening coverage", review_step=2)),
@@ -526,7 +536,7 @@ def test_anthropic_pilot_session_supports_targeted_macro_directives() -> None:
     assert directive.note == "lock west lane"
 
 
-def test_anthropic_pilot_prompt_mentions_shorthand_review_guidance() -> None:
+def test_anthropic_pilot_prompt_makes_log_records_the_only_review_path() -> None:
     fake_client = _FakeClient(_review_response(_directive_policy_source(note="opening coverage")))
     session = AnthropicPilotSession(client=fake_client, model="fake")
 
@@ -534,8 +544,10 @@ def test_anthropic_pilot_prompt_mentions_shorthand_review_guidance() -> None:
 
     prompt = _prompt_text(fake_client, 0)
     assert 'sdk.log.register_review_trigger("enemy_seen", "Replan after contact.", target="policy")' in prompt
-    assert 'sdk.log.request_review("enemy_seen", "Enemy on east lane.", target="policy")' in prompt
     assert 'review=ReviewRequest(trigger_name="enemy_seen", prompt="Replan after contact.")' in prompt
+    assert "only way step(sdk) can request later LLM work" in prompt
+    assert "there is no separate review shortcut API" in prompt
+    assert "sdk.log.request_review" not in prompt
     assert "never write import or from ... import lines" in prompt
     assert "LogRecord, ReviewRequest, and ReviewTrigger are already available by name" in prompt
     assert "sdk.scratchpad or sdk.read_scratchpad()" in prompt
@@ -549,7 +561,7 @@ def test_anthropic_pilot_prompt_mentions_shorthand_review_guidance() -> None:
     assert "keep the review hooks you still need" in prompt
     assert "move trigger registration behind a durable memory guard" in prompt
     assert "do not fire a phase_shift self-review on step 1" in prompt
-    assert "prefer reviews triggered by sdk.log.write" in prompt
+    assert "every review must come from sdk.log.write" in prompt
     assert "runtime_oscillation, runtime_target_fixation, runtime_bias_mismatch, or runtime_stagnation" in prompt
     assert (
         "register runtime_oscillation, runtime_target_fixation, runtime_bias_mismatch, and runtime_stagnation" in prompt
@@ -593,6 +605,19 @@ def test_anthropic_pilot_session_retries_non_json_review_response() -> None:
     retry_prompt = _prompt_text(fake_client, 1)
     assert "Previous output failed validation" in retry_prompt
     assert "Return only the compact JSON object" in retry_prompt
+
+
+def test_anthropic_pilot_initial_generation_prompt_requires_set_policy() -> None:
+    fake_client = _FakeClient(_review_response(_directive_policy_source(note="opening coverage")))
+    session = AnthropicPilotSession(client=fake_client, model="fake")
+
+    session.directive_for_state(_build_state(step=1), memory=MemoryStore())
+
+    prompt = _prompt_text(fake_client, 0)
+    assert "This request is initial generation for a brand-new live workspace." in prompt
+    assert 'For this initial-generation response, "set_policy" is required.' in prompt
+    assert "Do not return a memory-only or plan-only response." in prompt
+    assert 'If you only update memory.md or plan.md, omit "set_policy".' not in prompt
 
 
 def test_anthropic_pilot_prompt_includes_current_plan_without_duplication(tmp_path: Path) -> None:
@@ -642,6 +667,7 @@ def test_anthropic_pilot_review_prompt_carries_forward_registered_triggers() -> 
     assert "do not describe resource_bias as a lock" in review_prompt
     assert "change target_entity_id, target_region, resource_bias, or phase" in review_prompt
     assert "change the opening policy itself" in review_prompt
+    assert 'If you only update memory.md or plan.md, omit "set_policy".' in review_prompt
 
 
 def test_anthropic_pilot_session_persists_per_agent_artifacts(tmp_path: Path) -> None:

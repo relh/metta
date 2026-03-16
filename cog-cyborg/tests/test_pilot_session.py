@@ -96,16 +96,12 @@ class _LogStub:
     def __init__(self) -> None:
         self.records: list[LogRecord] = []
         self.triggers: list[ReviewTrigger] = []
-        self.requests: list[ReviewRequest] = []
 
     def write(self, record: LogRecord) -> None:
         self.records.append(record)
 
     def register_review_trigger(self, trigger: ReviewTrigger) -> None:
         self.triggers.append(trigger)
-
-    def request_review(self, request: ReviewRequest) -> None:
-        self.requests.append(request)
 
 
 class _FakeCodeBackend:
@@ -157,6 +153,21 @@ def _build_sdk(*, step: int = 5) -> MettagridSDK:
         helpers=StateHelperCatalog(state),
         memory=_MemoryStub(),
         log=_LogStub(),
+    )
+
+
+def _review_log(
+    *,
+    trigger_name: str,
+    prompt: str,
+    step: int,
+    message: str,
+) -> LogRecord:
+    return LogRecord(
+        level="info",
+        message=message,
+        step=step,
+        review=ReviewRequest(trigger_name=trigger_name, prompt=prompt),
     )
 
 
@@ -232,7 +243,9 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
                 action="policy",
                 set_policy=(
                     "def step(sdk):\n"
-                    '    sdk.log.request_review(ReviewRequest(trigger_name="enemy_seen", prompt="Switch roles."))\n'
+                    '    sdk.log.register_review_trigger(ReviewTrigger(name="enemy_seen", prompt="Switch roles."))\n'
+                    '    sdk.log.write(LogRecord(level="warning", message="Enemy on east lane.", step=sdk.state.step, '
+                    'review=ReviewRequest(trigger_name="enemy_seen", prompt="Switch roles.")))\n'
                     '    return {"role": "miner"}'
                 ),
                 replace_scratchpad="Open with mining coverage.",
@@ -273,7 +286,7 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
     assert "CROSS-SESSION POLICY DOC" not in rewrite_request.experience_tail
     transcript = store.read_log_tail(max_chars=4000)
     assert "review_request:" in transcript
-    assert "- source: sdk.log.request_review" in transcript
+    assert "- source: sdk.log.write(review=...)" in transcript
     assert "plan_updated=yes" in transcript
     assert "summary: Enemy contact triggered a rewrite." in transcript
     assert "llm_response:" in transcript
@@ -309,12 +322,18 @@ def test_live_policy_bundle_session_supports_external_review_rewrites(tmp_path: 
     session = LivePolicyBundleSession(backend=backend, artifact_store=store)
 
     initial = session.execute(sdk=_build_sdk(), prompt="write live policy", step=5, agent_id=0, goal="coverage")
-    review = session.review(
+    review = session.process_log_review(
+        record=_review_log(
+            trigger_name="objective:aligner_pressure",
+            prompt="Objective changed to pressure.",
+            step=6,
+            message="Objective changed to pressure.",
+        ),
         prompt="Objective changed to pressure.",
         step=6,
         agent_id=0,
-        trigger_name="objective:aligner_pressure",
         goal="pressure",
+        allow_unregistered_trigger=True,
     )
     updated = session.execute(sdk=_build_sdk(), prompt="reuse live policy", step=7, agent_id=0, goal="pressure")
 
@@ -379,12 +398,18 @@ def test_live_policy_bundle_session_preserves_review_hook_flags_on_scratchpad_re
     )
     session = LivePolicyBundleSession(backend=backend, artifact_store=store)
 
-    session.review(
+    session.process_log_review(
+        record=_review_log(
+            trigger_name="phase_shift",
+            prompt="Transition to economy_bootstrap.",
+            step=97,
+            message="Transition to economy_bootstrap.",
+        ),
         prompt="Transition to economy_bootstrap.",
         step=97,
         agent_id=0,
-        trigger_name="phase_shift",
         goal="pressure",
+        allow_unregistered_trigger=True,
     )
 
     assert store.read_scratchpad() == (
@@ -414,12 +439,18 @@ def test_live_policy_bundle_session_preserves_typed_runtime_keys_on_scratchpad_r
     )
     session = LivePolicyBundleSession(backend=backend, artifact_store=store)
 
-    session.review(
+    session.process_log_review(
+        record=_review_log(
+            trigger_name="runtime_stagnation",
+            prompt="Tighten the coverage escape hatch.",
+            step=97,
+            message="Tighten the coverage escape hatch.",
+        ),
         prompt="Tighten the coverage escape hatch.",
         step=97,
         agent_id=0,
-        trigger_name="runtime_stagnation",
         goal="pressure",
+        allow_unregistered_trigger=True,
     )
 
     assert store.read_scratchpad() == ("phase: economy_bootstrap\ndeposit_cycles: 2\nreview_hooks_ready: true")
@@ -492,8 +523,13 @@ def test_live_policy_bundle_session_uses_returned_objective_in_same_step_review_
                 set_policy=(
                     "def step(sdk):\n"
                     '    sdk.log.register_review_trigger(ReviewTrigger(name="phase_shift"))\n'
-                    "    sdk.log.request_review(\n"
-                    '        ReviewRequest(trigger_name="phase_shift", prompt="Moved to pressure.")\n'
+                    "    sdk.log.write(\n"
+                    "        LogRecord(\n"
+                    '            level="info",\n'
+                    '            message="Moved to pressure.",\n'
+                    "            step=sdk.state.step,\n"
+                    '            review=ReviewRequest(trigger_name="phase_shift", prompt="Moved to pressure."),\n'
+                    "        )\n"
                     "    )\n"
                     '    return {"role": "aligner", "objective": "aligner_pressure"}'
                 ),
@@ -539,8 +575,13 @@ def test_live_policy_bundle_session_can_suppress_selected_review_request(tmp_pat
                 set_policy=(
                     "def step(sdk):\n"
                     '    sdk.log.register_review_trigger(ReviewTrigger(name="phase_shift"))\n'
-                    "    sdk.log.request_review(\n"
-                    '        ReviewRequest(trigger_name="phase_shift", prompt="Moved to pressure.")\n'
+                    "    sdk.log.write(\n"
+                    "        LogRecord(\n"
+                    '            level="info",\n'
+                    '            message="Moved to pressure.",\n'
+                    "            step=sdk.state.step,\n"
+                    '            review=ReviewRequest(trigger_name="phase_shift", prompt="Moved to pressure."),\n'
+                    "        )\n"
                     "    )\n"
                     '    return {"role": "aligner", "objective": "aligner_pressure"}'
                 ),
@@ -590,7 +631,9 @@ def test_live_policy_bundle_session_treats_failed_reviews_as_noops(tmp_path: Pat
                 action="policy",
                 set_policy=(
                     "def step(sdk):\n"
-                    '    sdk.log.request_review(ReviewRequest(trigger_name="enemy_seen", prompt="Switch roles."))\n'
+                    '    sdk.log.register_review_trigger(ReviewTrigger(name="enemy_seen", prompt="Switch roles."))\n'
+                    '    sdk.log.write(LogRecord(level="warning", message="Enemy on east lane.", step=sdk.state.step, '
+                    'review=ReviewRequest(trigger_name="enemy_seen", prompt="Switch roles.")))\n'
                     '    return {"role": "miner"}'
                 ),
             ),
@@ -631,13 +674,17 @@ def test_live_policy_bundle_session_debug_snapshot_tracks_registered_trigger_nam
     session = LivePolicyBundleSession(backend=backend)
 
     session.execute(sdk=_build_sdk(), prompt="write live policy", step=5, agent_id=0, goal="coverage")
-    session.review(
+    session.process_log_review(
+        record=_review_log(
+            trigger_name="enemy_seen",
+            prompt="Enemy on east lane.",
+            step=6,
+            message="Enemy on east lane.",
+        ),
         prompt="refresh strategic hooks",
         step=6,
         agent_id=0,
-        trigger_name="enemy_seen",
         goal="pressure",
-        request_summary="Enemy on east lane.",
     )
 
     assert session.debug_snapshot()["registered_triggers"] == ["enemy_seen", "phase_shift"]
@@ -722,13 +769,18 @@ def test_live_policy_bundle_session_rolls_back_partial_policy_artifacts_when_gen
     monkeypatch.setattr(store, "append_generation_record", fail_first_generation_append)
 
     with pytest.raises(RuntimeError, match="disk full"):
-        session.review(
+        session.process_log_review(
+            record=_review_log(
+                trigger_name="enemy_seen",
+                prompt="Enemy on east lane.",
+                step=6,
+                message="Enemy on east lane.",
+            ),
             prompt="rewrite live policy",
             step=6,
             agent_id=0,
-            trigger_name="enemy_seen",
             goal="pressure",
-            request_summary="Enemy on east lane.",
+            allow_unregistered_trigger=True,
         )
 
     assert store.read_main_source().endswith('return {"role": "miner"}')
@@ -755,7 +807,8 @@ def test_live_policy_bundle_session_debug_snapshot_captures_log_triggered_review
                     '            level="info",\n'
                     '            message="Enemy on east lane.",\n'
                     "            step=sdk.state.step,\n"
-                    '            data={"trigger": "enemy_seen", "enemy_count": 2},\n'
+                    '            review=ReviewRequest(trigger_name="enemy_seen", prompt="Enemy on east lane."),\n'
+                    '            data={"enemy_count": 2},\n'
                     "        )\n"
                     "    )\n"
                     '    return {"role": "miner"}'
@@ -782,7 +835,7 @@ def test_live_policy_bundle_session_debug_snapshot_captures_log_triggered_review
 
     assert result.success is True
     assert [event["kind"] for event in snapshot["events"]] == ["llm_review", "policy_step", "llm_review"]
-    assert snapshot["events"][1]["selected_review_source"] == "sdk.log.write(data.trigger)"
+    assert snapshot["events"][1]["selected_review_source"] == "sdk.log.write(review=...)"
     assert snapshot["events"][1]["triggering_log"]["message"] == "Enemy on east lane."
     assert snapshot["events"][2]["request_summary"] == "Enemy on east lane."
     assert snapshot["events"][2]["review_summary"] == "Enemy contact triggered a rewrite."

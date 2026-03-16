@@ -234,7 +234,7 @@ Code Mode principles for these bundles:
 - the model-facing SDK should stay compact and stable so prompts can progressively reveal capabilities instead of dumping raw internals
 - `sdk.log.write(LogRecord(...))` is the canonical in-episode path for escalating notable situations to the reviewer
 - `sdk.log.register_review_trigger(...)` declares which logged situations are pause-worthy for this cog
-- `sdk.log.request_review(...)` may exist as shorthand, but it is not the primary contract; the runtime should treat reviews as triggered by logged records
+- `sdk.log.write(LogRecord(..., review=ReviewRequest(...)))` is the only way in-episode policy code requests later LLM work
 
 Directive semantics should stay narrow and explicit so the low-level policy and the reviewer are talking about the same
 control primitives:
@@ -256,7 +256,7 @@ The runtime should allow a player to register pause-worthy triggers such as:
 - first enemy sighting in a lane
 - repeated path failures
 - low heart economy
-- an emitted `sdk.log.write(LogRecord(..., data={"trigger": ...}))` from the current policy code
+- an emitted `sdk.log.write(LogRecord(..., review=ReviewRequest(...)))` from the current policy code
 
 When a trigger fires, the episode may pause while a backend edits memory, helper modules, or `main.py`.
 

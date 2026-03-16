@@ -239,7 +239,6 @@ class LivePolicyBundleSession:
             or result.success is False
             or bool(result.logs)
             or bool(result.review_triggers)
-            or bool(result.review_requests)
             or review_request is not None
             or current_return_signature != self._last_return_signature
         )
@@ -255,7 +254,6 @@ class LivePolicyBundleSession:
                     "error_message": result.error_message,
                     "logs": [_serialize_log_record(record) for record in result.logs],
                     "review_triggers": [_serialize_review_trigger(trigger) for trigger in result.review_triggers],
-                    "review_requests": [_serialize_review_request(request) for request in result.review_requests],
                     "selected_review_request": (
                         None if review_request is None else _serialize_review_request(review_request)
                     ),
@@ -273,37 +271,55 @@ class LivePolicyBundleSession:
             )
         self._last_return_signature = current_return_signature
         if review_request is not None:
-            self.review(
-                prompt=f"{prompt}\n\nReview request: {review_request.prompt or review_request.trigger_name}",
+            assert triggering_log is not None
+            self.process_log_review(
+                record=triggering_log,
+                prompt=prompt,
                 step=step,
                 agent_id=agent_id,
-                trigger_name=review_request.trigger_name,
                 goal=goal,
                 metadata=execution_metadata,
-                request_source=review_source or "sdk.log.request_review",
-                request_summary=review_request.prompt or review_request.trigger_name,
-                triggering_log=triggering_log,
+                request_source=review_source or "sdk.log.write(review=...)",
             )
         return result
 
-    def review(
+    def process_log_review(
         self,
         *,
+        record: LogRecord,
         prompt: str,
         step: int,
         agent_id: int,
-        trigger_name: str,
         goal: str = "",
         metadata: dict[str, str | int | float | bool] | None = None,
-        request_source: str = "manual_review",
-        request_summary: str | None = None,
-        triggering_log=None,
+        request_source: str = "sdk.log.write(review=...)",
+        extra_context: str = "",
+        allow_unregistered_trigger: bool = False,
+        append_request_transcript: bool = False,
     ) -> CodeReviewResponse:
+        review_request = _review_request_from_log_record(
+            record,
+            self._registered_trigger_names_snapshot(),
+            allow_unregistered_trigger=allow_unregistered_trigger,
+        )
+        if review_request is None:
+            raise ValueError("Log record did not include a registered review request")
+        review_prompt_parts = [prompt, "Logged review event:", _render_log_line(record)]
+        if extra_context:
+            review_prompt_parts.append(extra_context)
+        review_prompt = "\n\n".join(review_prompt_parts)
+        if append_request_transcript:
+            self._append_logged_review_request_transcript(
+                step=step,
+                agent_id=agent_id,
+                record=record,
+                request_source=request_source,
+            )
         request = self._build_review_request(
-            prompt=prompt,
+            prompt=review_prompt,
             step=step,
             agent_id=agent_id,
-            trigger_name=trigger_name,
+            trigger_name=review_request.trigger_name,
             goal=goal,
             metadata=metadata,
         )
@@ -311,11 +327,11 @@ class LivePolicyBundleSession:
             request=request,
             step=step,
             agent_id=agent_id,
-            trigger_name=trigger_name,
+            trigger_name=review_request.trigger_name,
             metadata=metadata,
             request_source=request_source,
-            request_summary=request_summary or trigger_name,
-            triggering_log=triggering_log,
+            request_summary=review_request.prompt or review_request.trigger_name,
+            triggering_log=record,
         )
 
     def _perform_review(
@@ -461,27 +477,26 @@ class LivePolicyBundleSession:
     ) -> None:
         if self._compiled_policy is not None:
             return
-        response = self._perform_review(
-            request=CodeReviewRequest(
-                agent_id=agent_id,
+        response = self.process_log_review(
+            record=LogRecord(
+                level="info",
+                message="No live policy yet. Generate the initial main.py for this cog.",
                 step=step,
-                goal=goal,
-                trigger_name="initial_generation",
-                prompt=prompt,
-                current_main_source=self._policy_source,
-                current_plan=("" if self._artifact_store is None else self._artifact_store.read_plan()),
-                current_scratchpad=("" if self._artifact_store is None else self._artifact_store.read_scratchpad()),
-                experience_tail="",
-                decision_log_tail="",
-                metadata={} if metadata is None else dict(metadata),
+                review=ReviewRequest(
+                    trigger_name="initial_generation",
+                    prompt="Generate the initial policy.",
+                ),
+                data={"policy_missing": True},
             ),
+            prompt=prompt,
             step=step,
             agent_id=agent_id,
-            trigger_name="initial_generation",
+            goal=goal,
             metadata=metadata,
             request_source="initial_generation",
-            request_summary="Generate the initial policy.",
-            triggering_log=None,
+            extra_context="Pre-step runtime log before any main.py exists.",
+            allow_unregistered_trigger=True,
+            append_request_transcript=True,
         )
         if not response.set_policy:
             raise ValueError("Live policy backend did not return set_policy for initial generation")
@@ -600,13 +615,25 @@ class LivePolicyBundleSession:
         for record in result.logs:
             review_request = _review_request_from_log_record(record, registered_trigger_names)
             if review_request is not None:
-                review_source = "sdk.log.write(review=...)"
-                if record.review is None:
-                    review_source = "sdk.log.write(data.trigger)"
-                return review_request, record, review_source
-        if result.review_requests:
-            return result.review_requests[0], None, "sdk.log.request_review"
+                return review_request, record, "sdk.log.write(review=...)"
         return None, None, None
+
+    def _append_logged_review_request_transcript(
+        self,
+        *,
+        step: int,
+        agent_id: int,
+        record: LogRecord,
+        request_source: str,
+    ) -> None:
+        assert record.review is not None
+        lines = [f"## Step {step} Agent {agent_id} runtime -> llm"]
+        lines.append("sdk.log:")
+        lines.append(f"- {_render_log_line(record)}")
+        lines.append("review_request:")
+        lines.append(f"- source: {request_source}")
+        lines.append(f"- details: {_render_review_request_line(record.review)}")
+        self._append_transcript_lines(lines)
 
     def _append_debug_event(self, event: dict[str, Any]) -> None:
         self._debug_events.append({"event_id": self._next_debug_event_id, **event})
@@ -719,33 +746,15 @@ class LivePolicyBundleSession:
 def _review_request_from_log_record(
     record: LogRecord,
     registered_trigger_names: set[str],
+    *,
+    allow_unregistered_trigger: bool = False,
 ) -> ReviewRequest | None:
-    if record.review is not None:
-        if record.review.trigger_name not in registered_trigger_names:
-            return None
-        return record.review
-    trigger_name = record.data.get("trigger")
-    if not isinstance(trigger_name, str):
+    review = record.review
+    if review is None:
         return None
-    if trigger_name not in registered_trigger_names:
+    if not allow_unregistered_trigger and review.trigger_name not in registered_trigger_names:
         return None
-    prompt = record.message
-    prompt_override = record.data.get("prompt")
-    if isinstance(prompt_override, str) and prompt_override:
-        prompt = prompt_override
-    target = "policy"
-    if record.data.get("target") in {"memory", "policy"}:
-        target = record.data["target"]
-    metadata = {}
-    if isinstance(record.data.get("metadata"), dict):
-        metadata = record.data["metadata"]
-    return ReviewRequest(
-        trigger_name=trigger_name,
-        prompt=prompt,
-        target=target,
-        step=record.step,
-        metadata=metadata,
-    )
+    return review
 
 
 def _merge_record_metadata(

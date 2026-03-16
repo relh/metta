@@ -64,16 +64,12 @@ class _PilotLogSink:
     def __init__(self) -> None:
         self.records = []
         self.triggers = []
-        self.requests = []
 
     def write(self, record) -> None:
         self.records.append(record)
 
     def register_review_trigger(self, trigger) -> None:
         self.triggers.append(trigger)
-
-    def request_review(self, request) -> None:
-        self.requests.append(request)
 
 
 def coerce_bool_arg(value: Any, *, default: bool) -> bool:
@@ -140,6 +136,7 @@ class _AnthropicCodeModeBackend:
         return _response_text(response), response, (time.perf_counter() - start) * 1000
 
     def _build_prompt(self, request: CodeReviewRequest) -> str:
+        is_initial_generation = request.trigger_name == "initial_generation"
         sections = [
             "You are maintaining an executable live workspace for one individual Cogsguard cyborg.",
             (
@@ -148,164 +145,198 @@ class _AnthropicCodeModeBackend:
             ),
             "This cog only makes strategic choices by returning a MacroDirective-shaped dict from step(sdk).",
             "You control exactly one cog. Do not assume a shared team planner exists.",
-            "Workspace files:",
-            "- main.py: executable Python entrypoint; it may define tiny helpers, but it must define step(sdk).",
-            "- memory.md: the sdk.memory scratchpad; use it for the current world model, hypotheses, and short notes.",
-            "- plan.md: the durable plan; rewrite it when goals, helper functions, or priorities change.",
-            "- experience_trace.jsonl: append-only observation and execution trace.",
-            "- review_transcript.log: append-only review transcript with API replies and rewrite outcomes.",
-            "In review responses, use replace_scratchpad to rewrite memory.md and replace_plan to rewrite plan.md.",
-            (
-                "Inside step(sdk), prefer sdk.memory.get('phase') / sdk.memory['phase'] for compact key-value state, "
-                "sdk.scratchpad or sdk.read_scratchpad() to read the whole file, and sdk.replace_scratchpad(...) to "
-                "rewrite the whole file."
-            ),
-            (
-                "For routine per-step state, prefer sdk.memory[...] updates over sdk.replace_scratchpad(...); do not "
-                "wipe hook flags such as review_hooks_ready or hooks_ready every step."
-            ),
-            (
-                "Keyed sdk.memory values are JSON-parsed scalars. If step(sdk) later increments or compares a key, "
-                "keep that memory.md line machine-readable, e.g. deposit_cycles: 3, not deposit_cycles: tracked."
-            ),
-            (
-                "Inside step(sdk), use sdk.read_plan() to inspect plan.md, sdk.replace_plan(...) to rewrite it, "
-                "and sdk.append_plan(...) only for a short new bullet."
-            ),
-            "Do not treat sdk.memory itself as a raw string; it is a memory interface, not plain text.",
-            (
-                "For future pause-and-review behavior, register meaningful triggers with "
-                "sdk.log.register_review_trigger(...), then emit a LogRecord with review=ReviewRequest(...). "
-                "Treat sdk.log.request_review(...) only as shorthand."
-            ),
-            "There is no hidden outer replan loop. If you want later LLM involvement, register and emit review logs.",
-            "Canonical review pattern:",
-            '- sdk.log.register_review_trigger("enemy_seen", "Replan after contact.", target="policy")',
-            (
-                '- sdk.log.write(LogRecord(level="info", message="Enemy on east lane.", step=sdk.state.step, '
-                'review=ReviewRequest(trigger_name="enemy_seen", prompt="Replan after contact."), '
-                'data={"objective": current}))'
-            ),
-            "Shorthand still allowed when necessary:",
-            '- sdk.log.request_review("enemy_seen", "Enemy on east lane.", target="policy")',
-            "Use sdk.log.write(LogRecord(...)) for high-signal observations that should show up in the transcript.",
-            "Allowed directive keys:",
-            '- role: "miner", "aligner", or "scrambler"',
-            '- target_entity_id: exact entity id such as "junction@6,0" when you need a specific target',
-            '- target_region: a lane or region label such as "west_lane" when you need a broader tactical bias',
-            '- resource_bias: "carbon", "oxygen", "germanium", or "silicon"',
-            '- objective: "resource_coverage", "economy_bootstrap", or "aligner_pressure"',
-            "- note: short string",
-            "Directive semantics:",
-            "- use target_entity_id as the strongest control primitive when one exact extractor or junction "
-            "should stay pinned",
-            "- use target_region when lane pressure or exploration should stay broad instead of pinning one entity",
-            "- use resource_bias only to prefer a resource type among viable extractors; it does not lock "
-            "one extractor",
-            "- if telemetry shows extractor oscillation or one productive extractor, prefer "
-            "target_entity_id over resource_bias",
-            "Constraints:",
-            "- never write import or from ... import lines; bounded main.py rejects them",
-            "- LogRecord, ReviewRequest, and ReviewTrigger are already available by name inside main.py",
-            "- prefer a single short step(sdk) function; only add helpers if they are truly needed",
-            "- return only dicts, never low-level moves",
-            "- prefer short deterministic code",
-            "- main.py is executed directly, so keep helper code small and self-contained",
-            "- sdk.helpers.agent_id() returns an int",
-            "- sdk.helpers.shared_inventory() returns dict[str, int]",
-            "- treat sdk.helpers and the Cogsguard skill library as compact capability hints; do not "
-            "reimplement low-level movement or mining loops in main.py",
-            "- maintain a compact memory.md with the current world model, phase, and blockers",
-            "- keep plan.md focused on goals, helper strategy, and what should trigger rewrites",
-            "- keep memory.md under 10 short lines and keep plan.md under 8 short bullets",
-            "- keep main.py concise; avoid long comments and repeated helper code",
-            (
-                "- if step(sdk) reads back phase or counters from memory.md, keep those key lines plain and "
-                "machine-readable"
-            ),
-            "- sdk.helpers.shared_inventory() may already be non-zero at step 1; do not skip phases from totals alone",
-            "- if missing resources remain or hearts are zero, stay conservative before jumping to aligner_pressure",
-            (
-                "- for single-cog or sparse-team openings, resource_coverage must have an explicit time/resource "
-                "escape hatch; do not wait forever for sdk.helpers.missing_resources() to become empty"
-            ),
-            (
-                "- if the current extractor is productive but the requested missing resource is unavailable, bias "
-                "toward the productive extractor or leave resource_bias unset instead of insisting on an "
-                "impossible bias"
-            ),
-            "- register 2-4 high-signal triggers during initial generation; do not spam logs every step",
-            (
-                "- if you want runtime telemetry from the semantic baseline, register exact triggers such as "
-                "runtime_oscillation, runtime_target_fixation, runtime_bias_mismatch, or runtime_stagnation"
-            ),
-            (
-                "- for single-cog or sparse-team openings that start in resource_coverage, register "
-                "runtime_oscillation, runtime_target_fixation, runtime_bias_mismatch, and runtime_stagnation "
-                "during initial generation unless the opening truly skips mining"
-            ),
-            (
-                "- if your code emits ReviewRequest(trigger_name='phase_shift', ...) or "
-                "ReviewRequest(trigger_name='enemy_seen', ...), register phase_shift / enemy_seen first so those "
-                "milestone logs can actually trigger a review"
-            ),
-            (
-                "- after every rewrite, keep the review hooks you still need by calling "
-                "sdk.log.register_review_trigger(...) in the new main.py"
-            ),
-            (
-                "- after a runtime rewrite, if the opening still mines or stays in resource_coverage / "
-                "economy_bootstrap, preserve those runtime_* triggers so the LLM can keep revising the opening"
-            ),
-            (
-                "- if you pivot into aligner_pressure, keep runtime_stagnation registered so the LLM can revisit "
-                "a bad pressure pivot too"
-            ),
-            (
-                "- if you remove the step-1 init block after a rewrite, move trigger registration behind a durable "
-                "memory guard such as review_hooks_ready in sdk.memory"
-            ),
-            "- do not fire a phase_shift self-review on step 1 unless the previous plan was genuinely wrong",
-            (
-                "- prefer LogRecord(..., review=ReviewRequest(...)) for milestone reviews; "
-                "avoid custom wrappers or imports"
-            ),
-            (
-                "- emit one concise sdk.log.write(LogRecord(...)) startup line at step 1 summarizing the opening "
-                "phase/bias"
-            ),
-            "- prefer one or two decisive sdk.log.write(...) calls over verbose per-step chatter",
-            "- after startup, only log again on real milestones such as phase shifts, heart changes, or enemy contact",
-            (
-                "- prefer reviews triggered by sdk.log.write(... review=ReviewRequest(...)) for milestones; reserve "
-                "sdk.log.request_review(...) for immediate contradictions or phase flips"
-            ),
-            (
-                "- if helper choice, goals, or phase logic depend on the durable plan, read it from sdk.read_plan() "
-                "and keep it current with sdk.replace_plan(...)"
-            ),
-            (
-                "- if telemetry shows extractor oscillation or repeated unstick_action, do not only relax a phase "
-                "threshold; explicitly change target_entity_id, target_region, resource_bias, role, or phase"
-            ),
-            "- if you emit logs, call sdk.log.write(LogRecord(...)), not sdk.log.write({...})",
-            "Return only compact JSON with this schema:",
-            (
-                '{"set_policy":"<full main.py source defining step(sdk)>",'
-                '"replace_scratchpad":"<full memory.md text>",'
-                '"replace_plan":"<full plan.md text>",'
-                '"review_summary":"<short summary>",'
-                '"triggers":[{"name":"enemy_seen","prompt":"Replan after contact.","target":"policy"}]}'
-            ),
-            'Do not return a top-level "main.py" key.',
-            'Do not put objects inside "set_policy"; it must be a single Python source string.',
-            'Action is inferred from which update fields you include; do not add a redundant top-level "action" key.',
-            'If you only update memory.md or plan.md, omit "set_policy".',
-            f"Goal: {request.goal or 'unspecified'}",
-            f"Trigger: {request.trigger_name or 'manual'}",
-            "Operator request:",
-            request.prompt,
         ]
+        if is_initial_generation:
+            sections.extend(
+                [
+                    "This request is initial generation for a brand-new live workspace.",
+                    "Your job is to create the first main.py for this cog and optionally seed memory.md and plan.md.",
+                ]
+            )
+        sections.extend(
+            [
+                "Workspace files:",
+                "- main.py: executable Python entrypoint; it may define tiny helpers, but it must define step(sdk).",
+                (
+                    "- memory.md: the sdk.memory scratchpad; use it for the current world model, hypotheses, "
+                    "and short notes."
+                ),
+                "- plan.md: the durable plan; rewrite it when goals, helper functions, or priorities change.",
+                "- experience_trace.jsonl: append-only observation and execution trace.",
+                "- review_transcript.log: append-only review transcript with API replies and rewrite outcomes.",
+                "In review responses, use replace_scratchpad to rewrite memory.md and replace_plan to rewrite plan.md.",
+                (
+                    "Inside step(sdk), prefer sdk.memory.get('phase') / sdk.memory['phase'] for compact "
+                    "key-value state, sdk.scratchpad or sdk.read_scratchpad() to read the whole file, and "
+                    "sdk.replace_scratchpad(...) to rewrite the whole file."
+                ),
+                (
+                    "For routine per-step state, prefer sdk.memory[...] updates over "
+                    "sdk.replace_scratchpad(...); do not wipe hook flags such as review_hooks_ready or "
+                    "hooks_ready every step."
+                ),
+                (
+                    "Keyed sdk.memory values are JSON-parsed scalars. If step(sdk) later increments or compares a key, "
+                    "keep that memory.md line machine-readable, e.g. deposit_cycles: 3, not deposit_cycles: tracked."
+                ),
+                (
+                    "Inside step(sdk), use sdk.read_plan() to inspect plan.md, sdk.replace_plan(...) to rewrite it, "
+                    "and sdk.append_plan(...) only for a short new bullet."
+                ),
+                "Do not treat sdk.memory itself as a raw string; it is a memory interface, not plain text.",
+                (
+                    "The only way step(sdk) can request later LLM work is by registering a trigger with "
+                    "sdk.log.register_review_trigger(...) and then emitting sdk.log.write(LogRecord(..., "
+                    "review=ReviewRequest(...)))."
+                ),
+                "There is no hidden outer replan loop and there is no separate review shortcut API.",
+                "If you want later LLM involvement, register and emit review logs.",
+                "Canonical review pattern:",
+                '- sdk.log.register_review_trigger("enemy_seen", "Replan after contact.", target="policy")',
+                (
+                    '- sdk.log.write(LogRecord(level="info", message="Enemy on east lane.", step=sdk.state.step, '
+                    'review=ReviewRequest(trigger_name="enemy_seen", prompt="Replan after contact."), '
+                    'data={"objective": current}))'
+                ),
+                "Use sdk.log.write(LogRecord(...)) for high-signal observations that should show up in the transcript.",
+                "Allowed directive keys:",
+                '- role: "miner", "aligner", or "scrambler"',
+                '- target_entity_id: exact entity id such as "junction@6,0" when you need a specific target',
+                '- target_region: a lane or region label such as "west_lane" when you need a broader tactical bias',
+                '- resource_bias: "carbon", "oxygen", "germanium", or "silicon"',
+                '- objective: "resource_coverage", "economy_bootstrap", or "aligner_pressure"',
+                "- note: short string",
+                "Directive semantics:",
+                "- use target_entity_id as the strongest control primitive when one exact extractor or junction "
+                "should stay pinned",
+                "- use target_region when lane pressure or exploration should stay broad instead of pinning one entity",
+                "- use resource_bias only to prefer a resource type among viable extractors; it does not lock "
+                "one extractor",
+                "- if telemetry shows extractor oscillation or one productive extractor, prefer "
+                "target_entity_id over resource_bias",
+                "Constraints:",
+                "- never write import or from ... import lines; bounded main.py rejects them",
+                "- LogRecord, ReviewRequest, and ReviewTrigger are already available by name inside main.py",
+                "- prefer a single short step(sdk) function; only add helpers if they are truly needed",
+                "- return only dicts, never low-level moves",
+                "- prefer short deterministic code",
+                "- main.py is executed directly, so keep helper code small and self-contained",
+                "- sdk.helpers.agent_id() returns an int",
+                "- sdk.helpers.shared_inventory() returns dict[str, int]",
+                "- treat sdk.helpers and the Cogsguard skill library as compact capability hints; do not "
+                "reimplement low-level movement or mining loops in main.py",
+                "- maintain a compact memory.md with the current world model, phase, and blockers",
+                "- keep plan.md focused on goals, helper strategy, and what should trigger rewrites",
+                "- keep memory.md under 10 short lines and keep plan.md under 8 short bullets",
+                "- keep main.py concise; avoid long comments and repeated helper code",
+                (
+                    "- if step(sdk) reads back phase or counters from memory.md, keep those key lines plain and "
+                    "machine-readable"
+                ),
+                (
+                    "- sdk.helpers.shared_inventory() may already be non-zero at step 1; do not skip phases "
+                    "from totals alone"
+                ),
+                (
+                    "- if missing resources remain or hearts are zero, stay conservative before jumping to "
+                    "aligner_pressure"
+                ),
+                (
+                    "- for single-cog or sparse-team openings, resource_coverage must have an explicit time/resource "
+                    "escape hatch; do not wait forever for sdk.helpers.missing_resources() to become empty"
+                ),
+                (
+                    "- if the current extractor is productive but the requested missing resource is unavailable, bias "
+                    "toward the productive extractor or leave resource_bias unset instead of insisting on an "
+                    "impossible bias"
+                ),
+                "- register 2-4 high-signal triggers during initial generation; do not spam logs every step",
+                (
+                    "- if you want runtime telemetry from the semantic baseline, register exact triggers such as "
+                    "runtime_oscillation, runtime_target_fixation, runtime_bias_mismatch, or runtime_stagnation"
+                ),
+                (
+                    "- for single-cog or sparse-team openings that start in resource_coverage, register "
+                    "runtime_oscillation, runtime_target_fixation, runtime_bias_mismatch, and runtime_stagnation "
+                    "during initial generation unless the opening truly skips mining"
+                ),
+                (
+                    "- if your code emits ReviewRequest(trigger_name='phase_shift', ...) or "
+                    "ReviewRequest(trigger_name='enemy_seen', ...), register phase_shift / enemy_seen first so those "
+                    "milestone logs can actually trigger a review"
+                ),
+                (
+                    "- after every rewrite, keep the review hooks you still need by calling "
+                    "sdk.log.register_review_trigger(...) in the new main.py"
+                ),
+                (
+                    "- after a runtime rewrite, if the opening still mines or stays in resource_coverage / "
+                    "economy_bootstrap, preserve those runtime_* triggers so the LLM can keep revising the opening"
+                ),
+                (
+                    "- if you pivot into aligner_pressure, keep runtime_stagnation registered so the LLM can revisit "
+                    "a bad pressure pivot too"
+                ),
+                (
+                    "- if you remove the step-1 init block after a rewrite, move trigger registration behind a durable "
+                    "memory guard such as review_hooks_ready in sdk.memory"
+                ),
+                "- do not fire a phase_shift self-review on step 1 unless the previous plan was genuinely wrong",
+                (
+                    "- prefer LogRecord(..., review=ReviewRequest(...)) for milestone reviews; "
+                    "avoid custom wrappers or imports"
+                ),
+                (
+                    "- emit one concise sdk.log.write(LogRecord(...)) startup line at step 1 summarizing the opening "
+                    "phase/bias"
+                ),
+                "- prefer one or two decisive sdk.log.write(...) calls over verbose per-step chatter",
+                (
+                    "- after startup, only log again on real milestones such as phase shifts, heart changes, "
+                    "or enemy contact"
+                ),
+                (
+                    "- every review must come from sdk.log.write(..., review=ReviewRequest(...)); do not invent a "
+                    "separate review API or wrapper"
+                ),
+                (
+                    "- if helper choice, goals, or phase logic depend on the durable plan, read it from "
+                    "sdk.read_plan() and keep it current with sdk.replace_plan(...)"
+                ),
+                (
+                    "- if telemetry shows extractor oscillation or repeated unstick_action, do not only relax a phase "
+                    "threshold; explicitly change target_entity_id, target_region, resource_bias, role, or phase"
+                ),
+                "- if you emit logs, call sdk.log.write(LogRecord(...)), not sdk.log.write({...})",
+                "Return only compact JSON with this schema:",
+                (
+                    '{"set_policy":"<full main.py source defining step(sdk)>",'
+                    '"replace_scratchpad":"<full memory.md text>",'
+                    '"replace_plan":"<full plan.md text>",'
+                    '"review_summary":"<short summary>",'
+                    '"triggers":[{"name":"enemy_seen","prompt":"Replan after contact.","target":"policy"}]}'
+                ),
+                'Do not return a top-level "main.py" key.',
+                'Do not put objects inside "set_policy"; it must be a single Python source string.',
+                (
+                    "Action is inferred from which update fields you include; do not add a redundant top-level "
+                    '"action" key.'
+                ),
+                f"Goal: {request.goal or 'unspecified'}",
+                f"Trigger: {request.trigger_name or 'manual'}",
+                "Operator request:",
+                request.prompt,
+            ]
+        )
+        if is_initial_generation:
+            sections.extend(
+                [
+                    'For this initial-generation response, "set_policy" is required.',
+                    "Do not return a memory-only or plan-only response.",
+                ]
+            )
+        else:
+            sections.append('If you only update memory.md or plan.md, omit "set_policy".')
         if request.current_main_source:
             sections.extend(["Current main.py:", request.current_main_source])
         if request.current_plan:
@@ -461,28 +492,19 @@ class AnthropicPilotSession:
         with self._lock:
             pending_runtime_log = self._pending_runtime_log
             self._pending_runtime_log = None
-            if pending_runtime_log is not None:
-                prompt = "\n\n".join(
-                    [
-                        prompt,
-                        "Runtime log that matched a registered review trigger:",
-                        _render_runtime_log_record(pending_runtime_log.record),
-                        pending_runtime_log.extra_context,
-                    ]
-                )
             if pending_runtime_log is not None and self._live_policy.policy_source:
                 policy_before_review = self._live_policy.policy_source
                 assert pending_runtime_log.record.review is not None
-                self._live_policy.review(
+                self._live_policy.process_log_review(
+                    record=pending_runtime_log.record,
                     prompt=prompt,
                     step=step,
                     agent_id=agent_id,
-                    trigger_name=pending_runtime_log.record.review.trigger_name,
                     goal=self._goal,
                     metadata=metadata,
                     request_source="sdk.log.write(runtime_telemetry)",
-                    request_summary=pending_runtime_log.record.review.prompt or pending_runtime_log.record.message,
-                    triggering_log=pending_runtime_log.record,
+                    extra_context=pending_runtime_log.extra_context,
+                    append_request_transcript=True,
                 )
                 self._record_policy_update(
                     policy_before=policy_before_review,
@@ -708,14 +730,9 @@ class AnthropicPilotSession:
 
     @staticmethod
     def _execution_review_reason(result) -> str | None:
-        if result.review_requests:
-            return result.review_requests[0].trigger_name
         for record in result.logs:
             if record.review is not None:
                 return record.review.trigger_name
-            trigger_name = record.data.get("trigger")
-            if isinstance(trigger_name, str) and trigger_name:
-                return trigger_name
         return None
 
 

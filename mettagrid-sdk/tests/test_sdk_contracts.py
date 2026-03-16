@@ -184,16 +184,12 @@ class FakeLog:
     def __init__(self) -> None:
         self.records: list[LogRecord] = []
         self.triggers: list[ReviewTrigger] = []
-        self.requests: list[ReviewRequest] = []
 
     def write(self, record: LogRecord) -> None:
         self.records.append(record)
 
     def register_review_trigger(self, trigger: ReviewTrigger) -> None:
         self.triggers.append(trigger)
-
-    def request_review(self, request: ReviewRequest) -> None:
-        self.requests.append(request)
 
 
 class FakePlan:
@@ -292,13 +288,22 @@ def test_sdk_supports_review_triggers_and_mutable_scratchpad() -> None:
     sdk.log.register_review_trigger(
         ReviewTrigger(name="enemy_lane_seen", prompt="Re-evaluate lane assignment.", target="policy")
     )
-    sdk.log.request_review(
-        ReviewRequest(trigger_name="enemy_lane_seen", prompt="Enemy appeared in the east lane.", target="memory")
+    sdk.log.write(
+        LogRecord(
+            level="warning",
+            message="Enemy appeared in the east lane.",
+            review=ReviewRequest(
+                trigger_name="enemy_lane_seen",
+                prompt="Enemy appeared in the east lane.",
+                target="memory",
+            ),
+        )
     )
 
     assert "Avoid overcommitting" in sdk.memory.read_scratchpad()
     assert log.triggers[0].name == "enemy_lane_seen"
-    assert log.requests[0].target == "memory"
+    assert log.records[0].review is not None
+    assert log.records[0].review.target == "memory"
 
 
 def test_sdk_exposes_scratchpad_helpers() -> None:

@@ -26,7 +26,6 @@ from mettagrid_sdk.sdk import (
     MettagridSDK,
     MettagridState,
     RetrievedMemoryRecord,
-    ReviewRequest,
     ReviewTrigger,
     SelfState,
     SemanticEntity,
@@ -111,16 +110,12 @@ class LogStub:
     def __init__(self) -> None:
         self.records: list[LogRecord] = []
         self.triggers: list[ReviewTrigger] = []
-        self.requests: list[ReviewRequest] = []
 
     def write(self, record: LogRecord) -> None:
         self.records.append(record)
 
     def register_review_trigger(self, trigger: ReviewTrigger) -> None:
         self.triggers.append(trigger)
-
-    def request_review(self, request: ReviewRequest) -> None:
-        self.requests.append(request)
 
 
 def _build_sdk() -> tuple[MettagridSDK, LogStub]:
@@ -228,14 +223,21 @@ def test_execute_compiled_policy_captures_logs_and_return_value() -> None:
     assert log.records[0].message == "choosing target"
 
 
-def test_execute_compiled_policy_captures_review_requests() -> None:
+def test_execute_compiled_policy_captures_review_requests_from_log_records() -> None:
     sdk, log = _build_sdk()
 
     result = _execute_policy_source(
         (
             "def step(sdk):\n"
             '    sdk.log.register_review_trigger(ReviewTrigger(name="enemy_seen", prompt="Change plan."))\n'
-            '    sdk.log.request_review(ReviewRequest(trigger_name="enemy_seen", prompt="Enemy in lane."))\n'
+            "    sdk.log.write(\n"
+            "        LogRecord(\n"
+            '            level="warning",\n'
+            '            message="Enemy in lane.",\n'
+            "            step=sdk.state.step,\n"
+            '            review=ReviewRequest(trigger_name="enemy_seen", prompt="Enemy in lane."),\n'
+            "        )\n"
+            "    )\n"
             '    return {"action": "hold"}'
         ),
         sdk,
@@ -243,13 +245,15 @@ def test_execute_compiled_policy_captures_review_requests() -> None:
 
     assert result.success is True
     assert result.review_triggers[0].name == "enemy_seen"
-    assert result.review_requests[0].trigger_name == "enemy_seen"
+    assert result.logs[0].review is not None
+    assert result.logs[0].review.trigger_name == "enemy_seen"
     assert log.triggers[0].prompt == "Change plan."
-    assert log.requests[0].prompt == "Enemy in lane."
+    assert log.records[0].review is not None
+    assert log.records[0].review.prompt == "Enemy in lane."
 
 
-def test_execute_compiled_policy_supports_review_api_shorthand() -> None:
-    sdk, log = _build_sdk()
+def test_execute_compiled_policy_rejects_request_review_shorthand() -> None:
+    sdk, _log = _build_sdk()
 
     result = _execute_policy_source(
         (
@@ -261,13 +265,10 @@ def test_execute_compiled_policy_supports_review_api_shorthand() -> None:
         sdk,
     )
 
-    assert result.success is True
+    assert result.success is False
     assert result.review_triggers[0].name == "enemy_seen"
-    assert result.review_triggers[0].target == "policy"
-    assert result.review_requests[0].trigger_name == "enemy_seen"
-    assert result.review_requests[0].target == "memory"
-    assert log.triggers[0].prompt == "Change plan."
-    assert log.requests[0].prompt == "Enemy in lane."
+    assert result.error_type == "AttributeError"
+    assert "'BufferedLogSink' object has no attribute 'request_review'" in (result.error_message or "")
 
 
 def test_execute_compiled_policy_allows_keyword_review_trigger_shorthand() -> None:

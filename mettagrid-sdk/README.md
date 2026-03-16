@@ -64,9 +64,9 @@ The important boundary is the SDK itself:
 - `sdk.log`
 - `sdk.plan`
 
-`sdk.log.write(LogRecord(..., review=ReviewRequest(...)))` is the canonical way in-episode code escalates a notable
-situation for pause-and-review. `sdk.log.request_review(...)` may exist as shorthand, but the runtime should treat
-reviews as triggered by logged records.
+`sdk.log.write(LogRecord(..., review=ReviewRequest(...)))` is the only in-episode way code escalates a notable
+situation for pause-and-review. There is no separate review shortcut API; if the LLM should be invoked later, the
+policy must emit a log record with a typed `review=ReviewRequest(...)`.
 
 ## Helper Surface
 

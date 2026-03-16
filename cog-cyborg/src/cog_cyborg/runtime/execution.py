@@ -56,7 +56,6 @@ class PolicyExecutionResult(BaseModel):
     return_repr: str = ""
     logs: list[LogRecord] = Field(default_factory=list)
     review_triggers: list[ReviewTrigger] = Field(default_factory=list)
-    review_requests: list[ReviewRequest] = Field(default_factory=list)
     error_type: str | None = None
     error_message: str | None = None
 
@@ -88,7 +87,6 @@ class BufferedLogSink:
         self._downstream = downstream
         self.records: list[LogRecord] = []
         self.review_triggers: list[ReviewTrigger] = []
-        self.review_requests: list[ReviewRequest] = []
 
     def write(self, record: LogRecord) -> None:
         self.records.append(record)
@@ -114,36 +112,6 @@ class BufferedLogSink:
         self.review_triggers.append(resolved_trigger)
         if hasattr(self._downstream, "register_review_trigger"):
             self._downstream.register_review_trigger(resolved_trigger)
-
-    def request_review(
-        self,
-        request: ReviewRequest | str | None = None,
-        prompt: str = "",
-        target: str = "policy",
-        step: int | None = None,
-        metadata: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> None:
-        resolved_request = _coerce_review_request(
-            request,
-            prompt=prompt,
-            target=target,
-            step=step,
-            metadata=metadata,
-            **kwargs,
-        )
-        self.review_requests.append(resolved_request)
-        synthetic_log = LogRecord(
-            level="info",
-            message=resolved_request.prompt or resolved_request.trigger_name,
-            step=resolved_request.step,
-            review=resolved_request,
-        )
-        self.records.append(synthetic_log)
-        if hasattr(self._downstream, "write"):
-            self._downstream.write(synthetic_log)
-        if hasattr(self._downstream, "request_review"):
-            self._downstream.request_review(resolved_request)
 
 
 def compile_policy(policy_update: PolicyUpdate) -> CompiledPolicy:
@@ -183,7 +151,6 @@ def execute_compiled_policy(
             return_repr="",
             logs=buffered_log.records,
             review_triggers=buffered_log.review_triggers,
-            review_requests=buffered_log.review_requests,
             error_type=type(exc).__name__,
             error_message=str(exc),
         )
@@ -194,7 +161,6 @@ def execute_compiled_policy(
         return_repr=_format_return_value(return_value),
         logs=buffered_log.records,
         review_triggers=buffered_log.review_triggers,
-        review_requests=buffered_log.review_requests,
     )
 
 
@@ -401,34 +367,3 @@ def _coerce_review_trigger(
             "metadata": kwargs.pop("metadata", {} if metadata is None else metadata),
         }
     return ReviewTrigger.model_validate(payload)
-
-
-def _coerce_review_request(
-    request: ReviewRequest | str | None,
-    *,
-    prompt: str,
-    target: str,
-    step: int | None,
-    metadata: dict[str, Any] | None,
-    **kwargs: Any,
-) -> ReviewRequest:
-    if isinstance(request, ReviewRequest):
-        return request
-    payload: dict[str, Any]
-    if isinstance(request, str):
-        payload = {
-            "trigger_name": request,
-            "prompt": prompt,
-            "target": target,
-            "step": step,
-            "metadata": {} if metadata is None else metadata,
-        }
-    else:
-        payload = {
-            "trigger_name": kwargs.pop("trigger_name", ""),
-            "prompt": kwargs.pop("prompt", prompt),
-            "target": kwargs.pop("target", target),
-            "step": kwargs.pop("step", step),
-            "metadata": kwargs.pop("metadata", {} if metadata is None else metadata),
-        }
-    return ReviewRequest.model_validate(payload)
