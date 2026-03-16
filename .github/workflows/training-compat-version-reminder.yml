@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize]
     paths:
       - "common/src/metta/common/training_compat.py"
+      - "devops/stable/stable_tool_check_registry.py"
       - "metta/rl/**"
       - "metta/tools/train.py"
       - "recipes/prod/**"
@@ -38,6 +39,7 @@ jobs:
 
           TRAINING_FILES=$(git diff --name-only "$BASE"...HEAD -- \
             common/src/metta/common/training_compat.py \
+            devops/stable/stable_tool_check_registry.py \
             metta/rl/ \
             metta/tools/train.py \
             recipes/prod/ \
