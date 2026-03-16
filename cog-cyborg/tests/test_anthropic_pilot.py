@@ -8,9 +8,14 @@ from typing import Any, cast
 import cog_cyborg.policy.anthropic_pilot as pilot_policy_mod
 import cog_cyborg.runtime.anthropic_pilot as pilot_runtime_mod
 from cog_cyborg.memory import MemoryStore
-from cog_cyborg.policy.anthropic_pilot import AnthropicCyborgPolicy, AnthropicPilotAgentPolicy
+from cog_cyborg.policy.anthropic_pilot import (
+    AnthropicCyborgPolicy,
+    AnthropicPilotAgentPolicy,
+    AnthropicPilotSession,
+    build_pilot_artifact_store,
+    build_pilot_memory_store,
+)
 from cog_cyborg.runtime import ArtifactStore
-from cog_cyborg.runtime.anthropic_pilot import AnthropicPilotSession
 from mettagrid_sdk.sdk import (
     GridPosition,
     LogRecord,
@@ -676,6 +681,24 @@ def test_anthropic_pilot_session_exposes_live_plan_helpers_to_generated_policy(t
 
     assert directive.note == "- Hold east lane"
     assert store.read_plan() == "# Plan\n- Hold east lane"
+
+
+def test_build_memory_store_reloads_persisted_semantic_memory(tmp_path: Path) -> None:
+    artifact_store = build_pilot_artifact_store(tmp_path, agent_id=0)
+    assert artifact_store is not None
+    memory = build_pilot_memory_store(artifact_store)
+    memory.append_event(
+        record_id="evt-1",
+        event_type="enemy_seen",
+        summary="Enemy spotted east.",
+        game="cogsguard",
+        step=3,
+        role_context="aligner",
+    )
+
+    reloaded = build_pilot_memory_store(artifact_store)
+
+    assert [record.summary for record in reloaded.recent_records(limit=1)] == ["Enemy spotted east."]
 
 
 def test_anthropic_cyborg_policy_uses_per_agent_pilots_to_steer_semantic_baseline() -> None:

@@ -43,15 +43,15 @@ class MemoryStore:
             self._scratchpad_file.parent.mkdir(parents=True, exist_ok=True)
 
     @classmethod
-    def from_file(cls, backing_file: Path) -> "MemoryStore":
+    def from_file(cls, backing_file: Path, *, scratchpad_file: Path | None = None) -> "MemoryStore":
         if not backing_file.exists():
-            return cls(backing_file=backing_file)
+            return cls(backing_file=backing_file, scratchpad_file=scratchpad_file)
         records = []
         for line in backing_file.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             records.append(_parse_record(json.loads(line)))
-        return cls(records, backing_file=backing_file)
+        return cls(records, backing_file=backing_file, scratchpad_file=scratchpad_file)
 
     def append_record(self, record: MemoryRecord) -> None:
         self._records.append(record)

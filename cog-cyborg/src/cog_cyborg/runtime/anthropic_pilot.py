@@ -740,8 +740,10 @@ def build_pilot_artifact_store(artifact_root: Path | None, *, agent_id: int) -> 
 def build_pilot_memory_store(artifact_store: ArtifactStore | None) -> MemoryStore:
     if artifact_store is None:
         return MemoryStore()
-    return MemoryStore(
-        backing_file=artifact_store.semantic_memory_file,
+    if artifact_store.semantic_memory_file is None:
+        return MemoryStore(scratchpad_file=artifact_store.scratchpad_file)
+    return MemoryStore.from_file(
+        artifact_store.semantic_memory_file,
         scratchpad_file=artifact_store.scratchpad_file,
     )
 
