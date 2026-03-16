@@ -122,9 +122,20 @@ async function sleep(ms: number): Promise<void> {
 
 async function parseJsonOrThrow(response: Response): Promise<unknown> {
   const text = await response.text()
-  const maybeJson = text ? (JSON.parse(text) as unknown) : null
+  let maybeJson: unknown = null
+  let parseError: unknown = null
+  if (text) {
+    try {
+      maybeJson = JSON.parse(text) as unknown
+    } catch (error) {
+      parseError = error
+    }
+  }
 
   if (response.ok) {
+    if (parseError) {
+      throw parseError
+    }
     return maybeJson
   }
 

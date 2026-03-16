@@ -90,6 +90,30 @@ describe('dashboard api', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('surfaces the friendly 503 error even when the backend returns html', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('<html>temporarily unavailable</html>', { status: 503 }))
+      .mockResolvedValueOnce(new Response('<html>temporarily unavailable</html>', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const pending = fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
+    void pending.catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(351)
+
+    await expect(pending).rejects.toThrow('503: Service temporarily unavailable - please try again.')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('preserves json parse failures on successful responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('<html>ok but not json</html>'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchDashboardData(DASHBOARD_RESPONSE.policy.id)).rejects.toBeInstanceOf(SyntaxError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('fetches the main dashboard summary without eager role or diagnose embeds', async () => {
     const fetchMock = mockDashboardFetch()
 
