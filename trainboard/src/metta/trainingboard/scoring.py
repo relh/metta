@@ -328,10 +328,6 @@ DEDUP_TITLE_STOPWORDS = {
 TITLE_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
-def load_cached_papers(cache_path: Path) -> list[ResearchPaperRecord]:
-    return load_normalized_records(cache_path)
-
-
 def _axis_signals(record: ResearchPaperRecord) -> dict[AxisId, float]:
     text = record.searchable_text()
     recommendation_text = " ".join(record.recommendations).lower()
@@ -569,7 +565,7 @@ def build_dashboard_snapshot_from_cache(
     cache_path: Path,
     llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None,
 ) -> DashboardSnapshot:
-    return build_dashboard_snapshot(load_cached_papers(cache_path), llm_scores_by_gid=llm_scores_by_gid)
+    return build_dashboard_snapshot(load_normalized_records(cache_path), llm_scores_by_gid=llm_scores_by_gid)
 
 
 def build_task_ranking_snapshot(
@@ -640,7 +636,7 @@ def build_task_ranking_snapshot_from_cache(
     require_llm_scores: bool = False,
 ) -> TaskRankingSnapshot:
     return build_task_ranking_snapshot(
-        load_cached_papers(cache_path),
+        load_normalized_records(cache_path),
         limit=limit,
         llm_scores_by_gid=llm_scores_by_gid,
         dedupe_titles=dedupe_titles,

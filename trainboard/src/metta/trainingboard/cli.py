@@ -29,7 +29,8 @@ from metta.trainingboard.local.backend.server import (
     run_server,
     task_ranking_llm_cache_path_for_state_dir,
 )
-from metta.trainingboard.scoring import build_task_ranking_snapshot, load_cached_papers
+from metta.trainingboard.normalized_cache import load_normalized_records
+from metta.trainingboard.scoring import build_task_ranking_snapshot
 
 
 @click.group()
@@ -171,7 +172,7 @@ def rank_tasks(
 
     resolved_state_dir = Path(state_dir).expanduser()
     task_cache_path = dashboard_cache_path_for_state_dir(resolved_state_dir)
-    papers = load_cached_papers(task_cache_path)
+    papers = load_normalized_records(task_cache_path)
     llm_cache_path = (
         Path(llm_cache).expanduser() if llm_cache else task_ranking_llm_cache_path_for_state_dir(resolved_state_dir)
     )

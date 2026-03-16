@@ -47,11 +47,11 @@ def test_resolve_frontend_target_blocks_traversal(tmp_path: Path) -> None:
 
 
 def test_build_dashboard_for_state_dir_works_without_cache(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(server_module, "load_cached_papers", lambda _path: [])
+    monkeypatch.setattr(server_module, "load_normalized_records", lambda _path: [])
     monkeypatch.setattr(
         server_module,
         "_load_llm_scores_for_state_dir",
-        lambda _state_dir: (None, tmp_path / "llm.ndjson"),
+        lambda _state_dir: ({}, tmp_path / "llm.ndjson"),
     )
     payload = build_dashboard_for_state_dir(tmp_path)
     assert "ranked_axes" in payload
@@ -93,7 +93,7 @@ def test_build_dashboard_for_state_dir_marks_llm_only_when_scores_exist(monkeypa
         evidence_confidence=0.75,
         rationale="",
     )
-    monkeypatch.setattr(server_module, "load_cached_papers", lambda _path: [paper])
+    monkeypatch.setattr(server_module, "load_normalized_records", lambda _path: [paper])
     monkeypatch.setattr(
         server_module,
         "_load_llm_scores_for_state_dir",

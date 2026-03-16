@@ -106,7 +106,7 @@ def test_rank_tasks_uses_cache_and_prints_json(monkeypatch, tmp_path: Path) -> N
         captured["state_dir"] = state_dir
         return tmp_path / "cache.ndjson"
 
-    def fake_load_cached_papers(cache_path: Path) -> list[ResearchPaperRecord]:
+    def fake_load_normalized_records(cache_path: Path) -> list[ResearchPaperRecord]:
         captured["cache_path"] = cache_path
         return []
 
@@ -134,7 +134,7 @@ def test_rank_tasks_uses_cache_and_prints_json(monkeypatch, tmp_path: Path) -> N
     monkeypatch.setattr(
         cli_module, "task_ranking_llm_cache_path_for_state_dir", fake_task_ranking_llm_cache_path_for_state_dir
     )
-    monkeypatch.setattr(cli_module, "load_cached_papers", fake_load_cached_papers)
+    monkeypatch.setattr(cli_module, "load_normalized_records", fake_load_normalized_records)
     monkeypatch.setattr(cli_module, "load_llm_score_cache", fake_load_llm_score_cache)
     monkeypatch.setattr(cli_module, "build_task_ranking_snapshot", fake_build_task_ranking_snapshot)
 
@@ -207,7 +207,7 @@ def test_rank_tasks_llm_mode_uses_llm_scores(monkeypatch, tmp_path: Path) -> Non
         captured["state_dir"] = state_dir
         return tmp_path / "tasks.ndjson"
 
-    def fake_load_cached_papers(cache_path: Path) -> list[ResearchPaperRecord]:
+    def fake_load_normalized_records(cache_path: Path) -> list[ResearchPaperRecord]:
         captured["cache_path"] = cache_path
         return records
 
@@ -256,7 +256,7 @@ def test_rank_tasks_llm_mode_uses_llm_scores(monkeypatch, tmp_path: Path) -> Non
         return FakeTaskRankingSnapshot()
 
     monkeypatch.setattr(cli_module, "dashboard_cache_path_for_state_dir", fake_dashboard_cache_path_for_state_dir)
-    monkeypatch.setattr(cli_module, "load_cached_papers", fake_load_cached_papers)
+    monkeypatch.setattr(cli_module, "load_normalized_records", fake_load_normalized_records)
     monkeypatch.setattr(cli_module, "resolve_openai_api_key", fake_resolve_openai_api_key)
     monkeypatch.setattr(
         cli_module, "task_ranking_llm_cache_path_for_state_dir", fake_task_ranking_llm_cache_path_for_state_dir
