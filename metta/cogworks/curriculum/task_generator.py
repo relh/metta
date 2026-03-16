@@ -114,8 +114,7 @@ class TaskGenerator(ABC):
 
     def get_task(self, task_id: int) -> MettaGridConfig:
         """Generate a task (MettaGridConfig) using task_id as seed."""
-        rng = random.Random()
-        rng.seed(task_id)
+        rng = random.Random(task_id)
         return self._apply_overrides(self._generate_task(task_id, rng), self._config.overrides)
 
     @abstractmethod
@@ -344,10 +343,9 @@ class BucketedTaskGenerator(TaskGenerator):
 
     def _generate_task(self, task_id: int, rng: random.Random) -> MettaGridConfig:
         """Generate task by calling child generator then applying bucket overrides."""
-        # First, sample values from each bucket
-        overrides = {}
-        for key, bucket_values in self._config.buckets.items():
-            overrides[key] = self._get_bucket_value(bucket_values, rng)
+        overrides = {
+            key: self._get_bucket_value(bucket_values, rng) for key, bucket_values in self._config.buckets.items()
+        }
 
         # Store the bucket values for the curriculum to access
         self._last_bucket_values = overrides.copy()
@@ -376,33 +374,17 @@ def _validate_open_task_generator(v: Any, handler):
 
         # Import the symbol named in 'type'
         target = load_symbol(t) if isinstance(t, str) else t
+        data = {k: value for k, value in v.items() if k != "type"}
 
         # If it's a Generator, use its nested Config
         if isinstance(target, type) and issubclass(target, TaskGenerator):
-            # Special handling for known task generators
-            if target is SingleTaskGenerator:
-                data = {k: v for k, v in v.items() if k != "type"}
-                return SingleTaskGenerator.Config.model_validate(data)
-            elif target is TaskGeneratorSet:
-                data = {k: v for k, v in v.items() if k != "type"}
-                return TaskGeneratorSet.Config.model_validate(data)
-            elif target is CyclicTaskGeneratorSet:
-                data = {k: v for k, v in v.items() if k != "type"}
-                return CyclicTaskGeneratorSet.Config.model_validate(data)
-            elif target is BucketedTaskGenerator:
-                data = {k: v for k, v in v.items() if k != "type"}
-                return BucketedTaskGenerator.Config.model_validate(data)
-            else:
-                # Generic handling for unknown task generators
-                cfg_model = getattr(target, "Config", None)
-                if not (isinstance(cfg_model, type) and issubclass(cfg_model, TaskGeneratorConfig)):
-                    raise TypeError(f"{target.__name__} must define a nested class Config(TaskGeneratorConfig).")
-                data = {k: v for k, v in v.items() if k != "type"}
-                return cfg_model.model_validate(data)
+            cfg_model = getattr(target, "Config", None)
+            if not (isinstance(cfg_model, type) and issubclass(cfg_model, TaskGeneratorConfig)):
+                raise TypeError(f"{target.__name__} must define a nested class Config(TaskGeneratorConfig).")
+            return cfg_model.model_validate(data)
 
         # If it's already a Config subclass, validate with it directly
         if isinstance(target, type) and issubclass(target, TaskGeneratorConfig):
-            data = {k: v for k, v in v.items() if k != "type"}
             return target.model_validate(data)
 
         raise TypeError(

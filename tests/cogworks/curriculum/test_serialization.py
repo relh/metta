@@ -65,6 +65,22 @@ class TestCurriculumConfigSerialization(unittest.TestCase):
         # Check they serialize to the same JSON
         self.assertEqual(original.model_dump_json(), restored.model_dump_json())
 
+    def test_config_type_path_deserializes_to_nested_config(self):
+        """Test that task-generator config FQCNs validate through the generic open-config path."""
+        arena = eb.make_arena(num_agents=2)
+        payload = {
+            "task_generator": {
+                "type": "metta.cogworks.curriculum.task_generator.SingleTaskGenerator.Config",
+                "env": arena.model_dump(),
+            },
+            "num_active_tasks": 10,
+        }
+
+        restored = CurriculumConfig.model_validate(payload)
+
+        self.assertIsInstance(restored.task_generator, SingleTaskGenerator.Config)
+        self.assertEqual(restored.task_generator.env.model_dump(), arena.model_dump())
+
     def test_deeply_nested_bucketed(self):
         """Test nested `BucketedTaskGenerator.Config` round-trip."""
         arena = eb.make_arena(num_agents=2)
