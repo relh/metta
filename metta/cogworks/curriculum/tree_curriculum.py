@@ -7,6 +7,7 @@ from typing import Sequence
 
 from pydantic import Field
 
+from cogames.variants import VariantRegistry
 from metta.cogworks.curriculum.curriculum import CurriculumAlgorithmConfig, CurriculumConfig
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
 from metta.cogworks.curriculum.task_generator import TaskGenerator, TaskGeneratorConfig
@@ -30,13 +31,15 @@ class MechanicsTreeDefinition:
 
 
 def _variant_closure(*, game: str, variant_names: Sequence[str]) -> tuple[str, ...]:
+    """Compute the transitive closure of variant names including all dependencies."""
     game_info = GAMES.get(game)
     if game_info is None:
         raise ValueError(f"Unknown game {game!r}. Available: {list(GAMES.keys())}")
-    parse_variants = game_info.get("parse_variants")
-    if parse_variants is None:
-        return tuple(dict.fromkeys(variant_names))
-    return tuple(variant.name for variant in parse_variants(list(variant_names)))
+    mission_cls = game_info["mission_class"]
+    prefixes = mission_cls.variant_module_prefixes()
+    registry = VariantRegistry()
+    registry.run_configure(list(variant_names), preferred_modules=prefixes)
+    return tuple(registry._configure_order)
 
 
 def build_tree_nodes(

@@ -1,3 +1,4 @@
+from cogames.variants import VariantRegistry
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
 from metta.games.games import make_game
 from metta.games.hunger.tree_curriculum import (
@@ -6,7 +7,8 @@ from metta.games.hunger.tree_curriculum import (
     hunger_mechanics,
     make_hunger_tree_curriculum,
 )
-from metta.games.hunger.variants import parse_variants
+
+_HUNGER_PREFIXES = ("metta.games.hunger.",)
 
 
 def test_hunger_tree_nodes_are_dependency_closed_and_multi_depth() -> None:
@@ -22,7 +24,9 @@ def test_hunger_tree_nodes_are_dependency_closed_and_multi_depth() -> None:
         assert node.variants not in seen
         seen.add(node.variants)
 
-        resolved = tuple(variant.name for variant in parse_variants(list(node.mechanics)))
+        registry = VariantRegistry()
+        registry.run_configure(list(node.mechanics), preferred_modules=_HUNGER_PREFIXES)
+        resolved = tuple(registry._configure_order)
         assert node.variants == resolved
 
 

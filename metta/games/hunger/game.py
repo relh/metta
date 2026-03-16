@@ -14,7 +14,6 @@ except ImportError:
     # Published compat packages before the games/ migration still expose MachinaArena here.
     from cogames.cogs_vs_clips.terrain import MachinaArena
 from metta.games.games import register  # noqa: E402
-from metta.games.hunger.variants import parse_variants
 from mettagrid.config.action_config import ActionsConfig, MoveActionConfig, NoopActionConfig
 from mettagrid.config.mettagrid_config import (
     AgentConfig,
@@ -33,6 +32,10 @@ from mettagrid.mapgen.scenes.compound import Compound
 class HungerGame(CoGameMission):
     default_variant: str = "full"
     max_steps: int = Field(default=250)  # 1 year; use multi_year_5 or multi_year_10 for longer
+
+    @classmethod
+    def variant_module_prefixes(cls) -> tuple[str, ...]:
+        return ("metta.games.hunger.",)
 
     @classmethod
     def create(cls, num_agents: int, max_steps: int) -> HungerGame:
@@ -115,7 +118,6 @@ class HungerGame(CoGameMission):
 register(
     "hunger",
     HungerGame,
-    parse_variants=parse_variants,
     policy_uri="metta://policy/hunger_agent",
     policy_packages=["metta.games.hunger.agent.hunger_agent"],
 )

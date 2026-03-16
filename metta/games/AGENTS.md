@@ -371,7 +371,7 @@ class MyMission(CoGameMission):
         return cls(name="basic", site=my_site(num_agents), num_cogs=num_agents, max_steps=max_steps)
 
 from metta.games.games import register
-register("my_game", MyMission, parse_variants=parse_variants, policy_uri="metta://policy/my_agent", policy_packages=["metta.games.my_game.agent"])
+register("my_game", MyMission, policy_uri="metta://policy/my_agent", policy_packages=["metta.games.my_game.agent"])
 ```
 
 ### 2. Add import to `metta/games/games.py`
