@@ -3,9 +3,10 @@
 This ensures that all policies (ComponentPolicy, PyTorch agents with mixin, etc.)
 implement the required methods that MettaAgent depends on."""
 
+import sys
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, Callable, ClassVar, List, Optional, cast
+from typing import Any, ClassVar, List, Optional, cast
 
 import numpy as np
 import torch
@@ -54,14 +55,14 @@ class PolicyArchitecture(Config):
 
     def make_policy(self, policy_env_info: PolicyEnvInterface) -> "Policy":
         """Create an agent instance from configuration."""
-        AgentClass = cast(Callable[[PolicyEnvInterface, "PolicyArchitecture"], "Policy"], load_symbol(self.class_path))
-        if AgentClass is None:
-            raise ValueError(f"Failed to load class from path: {self.class_path}")
-        return AgentClass(policy_env_info, self)
+        policy_class = load_symbol(self.class_path)
+        if not isinstance(policy_class, type):
+            raise TypeError(f"Loaded symbol {self.class_path} is not a class")
+        return cast(Policy, policy_class(policy_env_info, self))
 
     def to_spec(self) -> str:
         """Serialize this architecture to a string specification."""
-        module_name = self.__class__.__module__
+        module_name = _module_name_for_spec(self.__class__)
         class_path = f"{module_name}.{self.__class__.__qualname__}"
         config_data = self.model_dump(mode="json")
         config_data.pop("class_path", None)
@@ -377,7 +378,8 @@ class ExternalPolicyWrapper(Policy):
     ):
         super().__init__(policy_env_interface)
         self.policy = policy
-        self._device = next(policy.parameters()).device if hasattr(policy, "parameters") else torch.device("cpu")
+        first_parameter = next(policy.parameters(), None)
+        self._device = first_parameter.device if first_parameter is not None else torch.device("cpu")
         if box_obs:
             self.obs_shaper = ObsShimBox(
                 policy_env_interface,
@@ -438,8 +440,6 @@ def _load_component(data: Any, context: str, default_class: type | None = None) 
     from collections.abc import Mapping  # noqa: PLC0415
 
     if not isinstance(data, Mapping):
-        if hasattr(data, "model_dump"):
-            return data
         raise TypeError(f"Component config for {context} must be a mapping, got {type(data)!r}")
 
     class_path = data.get("class_path")
@@ -477,3 +477,28 @@ def _expr_to_dotted(expr) -> str:
     if isinstance(expr, ast.Attribute):
         return f"{_expr_to_dotted(expr.value)}.{expr.attr}"
     raise ValueError("Expected a dotted name for policy architecture class path")
+
+
+def _module_name_for_spec(cls: type[Any]) -> str:
+    module_name = cls.__module__
+    module_path = Path(module_name)
+    if module_path.suffix != ".py":
+        return module_name
+
+    resolved_module_path = module_path.expanduser().resolve()
+    for sys_path_entry in sys.path:
+        try:
+            relative_path = resolved_module_path.relative_to(Path(sys_path_entry or ".").resolve())
+        except ValueError:
+            continue
+        if relative_path.suffix != ".py":
+            continue
+        parts = relative_path.with_suffix("").parts
+        if parts and parts[-1] == "__init__":
+            parts = parts[:-1]
+        if parts:
+            return ".".join(parts)
+
+    raise ValueError(
+        f"Cannot serialize policy architecture {cls.__qualname__} from non-importable module path {module_name!r}"
+    )
