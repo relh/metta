@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { getDisplayMessage } from "@observatory/lib/error-classification";
+
 const TOKEN_REFRESH_CHECK_MS = 60_000;
 const TOKEN_REFRESH_LEAD_MS = 2 * 60_000;
 
@@ -11,7 +13,7 @@ type SessionTokenPayload = {
 };
 
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error ? getDisplayMessage(error) : String(error);
 }
 
 type SurfaceEmbedProps = {

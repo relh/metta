@@ -102,6 +102,20 @@ export type AdminUserSubmittedPolicy = AdminUserPolicyRow;
 
 // ── Frontend-only types (not from the API spec) ─────────────────────────
 
+// ApiError carries a `transient` flag to distinguish recoverable outages from
+// permanent errors. The message is prefixed with "__transient__" so the flag
+// survives Next.js SSR error serialisation (which strips custom properties).
+export class ApiError extends Error {
+  transient: boolean;
+  constructor(message: string, transient: boolean) {
+    // Prefix message so the classification survives Next.js SSR serialisation,
+    // which strips all custom properties and preserves only `message`/`digest`.
+    super(transient ? `__transient__${message}` : `__permanent__${message}`);
+    this.transient = transient;
+    this.name = "ApiError";
+  }
+}
+
 const decodePathSegment = (value: string) => {
   try {
     return decodeURIComponent(value);
@@ -142,6 +156,38 @@ export type RequestLogEntry = {
 export type OnRequestCallback = (entry: RequestLogEntry) => void;
 
 let nextRequestId = 0;
+const TRANSIENT_OUTAGE_MESSAGE =
+  "Observatory is temporarily unreachable — please try again in a moment.";
+const BAD_GATEWAY_FALLBACK_MESSAGE =
+  "Observatory API is temporarily unavailable.";
+const MAX_BAD_GATEWAY_MESSAGE_LENGTH = 500;
+
+function extractBadGatewayMessage(bodyMessage: string | undefined): string {
+  const trimmed = bodyMessage?.trim();
+  let candidateMessage = trimmed;
+  if (trimmed && trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const fromJson =
+        typeof (parsed as any)?.error === "string"
+          ? (parsed as any).error
+          : typeof (parsed as any)?.detail === "string"
+            ? (parsed as any).detail
+            : undefined;
+      if (fromJson) {
+        candidateMessage = fromJson.trim();
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+  }
+  const looksLikeHtml = candidateMessage?.includes("<");
+  const isTooLong =
+    (candidateMessage?.length ?? 0) > MAX_BAD_GATEWAY_MESSAGE_LENGTH;
+  return candidateMessage && !looksLikeHtml && !isTooLong
+    ? candidateMessage
+    : BAD_GATEWAY_FALLBACK_MESSAGE;
+}
 
 export class Repo {
   constructor(
@@ -189,7 +235,21 @@ export class Repo {
     if (!isOutageSimulated()) return;
     const startTime = performance.now();
     this.logRequest(endpoint, method, startTime, 0, "Simulated API outage");
-    throw new Error("Simulated API outage");
+    throw new ApiError("Simulated API outage", true);
+  }
+
+  private rethrowFetchError(
+    endpoint: string,
+    method: string,
+    startTime: number,
+    err: unknown,
+  ): never {
+    const message = err instanceof Error ? err.message : String(err);
+    this.logRequest(endpoint, method, startTime, 0, message);
+    if (err instanceof TypeError) {
+      throw new ApiError(TRANSIENT_OUTAGE_MESSAGE, true);
+    }
+    throw err;
   }
 
   private async handleErrorResponse(response: Response): Promise<never> {
@@ -205,10 +265,32 @@ export class Repo {
       if (typeof window === "undefined") {
         notFound();
       }
-      throw new Error("Not found");
+      throw new ApiError("Not found", false);
+    }
+    if (response.status === 502) {
+      let bodyMessage: string | undefined;
+      try {
+        bodyMessage = await response.text();
+      } catch {
+        // ignore
+      }
+      throw new ApiError(extractBadGatewayMessage(bodyMessage), true);
+    }
+    if (response.status === 429) {
+      throw new ApiError("Too many requests — please try again soon.", true);
     }
     if (response.status === 503) {
-      throw new Error("Service temporarily unavailable — please try again");
+      throw new ApiError(
+        "Service temporarily unavailable — please try again",
+        true,
+      );
+    }
+    if (
+      response.status === 504 ||
+      response.status === 522 ||
+      response.status === 524
+    ) {
+      throw new ApiError(TRANSIENT_OUTAGE_MESSAGE, true);
     }
     let detail: string | undefined;
     try {
@@ -217,10 +299,11 @@ export class Repo {
     } catch {
       // Ignore JSON parse errors
     }
-    throw new Error(
+    throw new ApiError(
       detail
         ? JSON.stringify(detail, null, 2)
         : `API call failed: ${response.status} ${response.statusText}`,
+      false,
     );
   }
 
@@ -232,9 +315,8 @@ export class Repo {
       response = await fetch(`${this.baseUrl}${endpoint}`, {
         headers: this.getHeaders(),
       });
-    } catch (err: any) {
-      this.logRequest(endpoint, "GET", startTime, 0, err.message);
-      throw err;
+    } catch (err: unknown) {
+      this.rethrowFetchError(endpoint, "GET", startTime, err);
     }
     this.logRequest(
       endpoint,
@@ -251,17 +333,17 @@ export class Repo {
 
   private async apiCallWithBody<T>(endpoint: string, body: any): Promise<T> {
     this.throwIfOutage(endpoint, "POST");
+    const serializedBody = JSON.stringify(body);
     const startTime = performance.now();
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${endpoint}`, {
         method: "POST",
         headers: this.getHeaders("application/json"),
-        body: JSON.stringify(body),
+        body: serializedBody,
       });
-    } catch (err: any) {
-      this.logRequest(endpoint, "POST", startTime, 0, err.message);
-      throw err;
+    } catch (err: unknown) {
+      this.rethrowFetchError(endpoint, "POST", startTime, err);
     }
     this.logRequest(
       endpoint,
@@ -285,9 +367,8 @@ export class Repo {
         method: "DELETE",
         headers: this.getHeaders(),
       });
-    } catch (err: any) {
-      this.logRequest(endpoint, "DELETE", startTime, 0, err.message);
-      throw err;
+    } catch (err: unknown) {
+      this.rethrowFetchError(endpoint, "DELETE", startTime, err);
     }
     this.logRequest(
       endpoint,
@@ -510,9 +591,8 @@ export class Repo {
       response = await fetch(`${this.baseUrl}${endpoint}`, {
         headers: this.getHeaders(),
       });
-    } catch (err: any) {
-      this.logRequest(endpoint, "GET", startTime, 0, err.message);
-      throw err;
+    } catch (err: unknown) {
+      this.rethrowFetchError(endpoint, "GET", startTime, err);
     }
     this.logRequest(
       endpoint,
@@ -549,9 +629,8 @@ export class Repo {
       response = await fetch(`${this.baseUrl}${endpoint}`, {
         headers: this.getHeaders(),
       });
-    } catch (err: any) {
-      this.logRequest(endpoint, "GET", startTime, 0, err.message);
-      throw err;
+    } catch (err: unknown) {
+      this.rethrowFetchError(endpoint, "GET", startTime, err);
     }
     this.logRequest(
       endpoint,

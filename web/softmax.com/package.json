@@ -8,6 +8,7 @@
     "build": "next build",
     "typegen": "rm -rf .next/types .next/dev/types && next typegen",
     "type-check": "tsc --noEmit --pretty",
+    "test": "vitest run",
     "lint:prettier": "prettier --log-level warn --check .",
     "lint:eslint": "eslint .",
     "format": "prettier --write .",
@@ -64,17 +65,21 @@
     "@eslint/js": "^9.32.0",
     "@tailwindcss/postcss": "^4.1.17",
     "@tailwindcss/typography": "^0.5.19",
+    "@testing-library/react": "^16.3.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.10.12",
     "@types/pg": "^8",
     "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.32.0",
+    "jsdom": "^27.0.0",
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.7.4",
     "tailwindcss": "^4.1.17",
     "tsx": "^4.21.0",
     "typescript": "^5.2.2",
-    "typescript-eslint": "^8.55.0"
+    "typescript-eslint": "^8.55.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^3.2.4"
   }
 }

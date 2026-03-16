@@ -7,6 +7,7 @@ import { AsyncSelect } from "@observatory/components/AsyncSelect";
 import { Button } from "@observatory/components/Button";
 import { Select } from "@observatory/components/Select";
 import type { PolicyRow, PolicyVersionRow } from "@observatory/lib/api";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 
 type PolicyOption = {
   value: string;
@@ -129,7 +130,9 @@ export const SubmitForm: FC<{
       }
       router.refresh();
     } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : "Unknown error");
+      setSubmitError(
+        err instanceof Error ? getDisplayMessage(err) : "Unknown error",
+      );
     } finally {
       setSubmitting(false);
     }

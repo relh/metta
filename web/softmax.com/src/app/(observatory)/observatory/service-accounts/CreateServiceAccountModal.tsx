@@ -8,6 +8,7 @@ import { CopyableUri } from "@observatory/components/CopyableUri";
 import { Input } from "@observatory/components/Input";
 import { Spinner } from "@observatory/components/Spinner";
 import type { ServiceAccountCreateResponse } from "@observatory/lib/api";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 
 type ModalState =
   | { type: "closed" }
@@ -43,7 +44,7 @@ export const CreateServiceAccountModal: FC = () => {
         type: "error",
         error:
           err instanceof Error
-            ? err.message
+            ? getDisplayMessage(err)
             : "Failed to create service account",
       });
     }

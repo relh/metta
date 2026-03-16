@@ -5,6 +5,7 @@ import { AppContext } from "@observatory-app/AppContext";
 import { Button } from "@observatory/components/Button";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 import { Spinner } from "@observatory/components/Spinner";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 import {
   SQLQueryResponse,
   TableInfo,
@@ -130,7 +131,9 @@ export default function SQLQueryPage() {
       setQueryState({
         type: "error",
         error:
-          error instanceof Error ? error.message : "Query execution failed",
+          error instanceof Error
+            ? getDisplayMessage(error)
+            : "Query execution failed",
       });
       saveQueryToHistory(query, null, true);
     }

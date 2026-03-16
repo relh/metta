@@ -11,6 +11,7 @@ import { AppContext } from "@observatory-app/AppContext";
 import { Button } from "@observatory/components/Button";
 import { Select } from "@observatory/components/Select";
 import type { SeasonSummary, SeasonVersionInfo } from "@observatory/lib/api";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 import { seasonRoute } from "@observatory/lib/routes";
 import {
   type SeasonTabMode,
@@ -232,7 +233,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
         setUpdateCompatVersion("");
         setCompatVersionError(
           error instanceof Error
-            ? error.message
+            ? getDisplayMessage(error)
             : "Failed to load compat versions",
         );
       })
@@ -463,7 +464,9 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
       router.refresh();
     } catch (error: unknown) {
       setRollError(
-        error instanceof Error ? error.message : "Failed to roll season",
+        error instanceof Error
+          ? getDisplayMessage(error)
+          : "Failed to roll season",
       );
     } finally {
       setIsRolling(false);
@@ -493,7 +496,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
     } catch (error: unknown) {
       setUpdateCompatError(
         error instanceof Error
-          ? error.message
+          ? getDisplayMessage(error)
           : "Failed to update current season compat version",
       );
     } finally {

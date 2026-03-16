@@ -2,6 +2,7 @@ import { FC, use, useState } from "react";
 
 import { AppContext } from "@observatory-app/AppContext";
 import { Button } from "@observatory/components/Button";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 
 export const AIQueryBuilder: FC<{
   onQueryGenerated: (query: string) => void;
@@ -26,7 +27,11 @@ export const AIQueryBuilder: FC<{
       onQueryGenerated(query);
       setDescription("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate query");
+      setError(
+        err instanceof Error
+          ? getDisplayMessage(err)
+          : "Failed to generate query",
+      );
     } finally {
       setLoading(false);
     }

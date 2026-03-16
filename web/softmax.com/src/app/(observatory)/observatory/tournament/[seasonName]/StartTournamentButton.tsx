@@ -5,6 +5,7 @@ import { FC, use, useState } from "react";
 
 import { AppContext } from "@observatory-app/AppContext";
 import { Button } from "@observatory/components/Button";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 
 export const StartTournamentButton: FC<{
   seasonName: string;
@@ -23,7 +24,9 @@ export const StartTournamentButton: FC<{
       router.refresh();
     } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : "Failed to start tournament",
+        err instanceof Error
+          ? getDisplayMessage(err)
+          : "Failed to start tournament",
       );
     } finally {
       setStarting(false);

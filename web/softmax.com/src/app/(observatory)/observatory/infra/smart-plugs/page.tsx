@@ -5,6 +5,7 @@ import { AppContext } from "@observatory-app/AppContext";
 import { Button } from "@observatory/components/Button";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 import { Spinner } from "@observatory/components/Spinner";
+import { getDisplayMessage } from "@observatory/lib/error-classification";
 import { SmartPlugStatus } from "@observatory/lib/repo";
 
 export default function SmartPlugsPage() {
@@ -23,7 +24,11 @@ export default function SmartPlugsPage() {
       setPlugs(response.items);
       setRefreshedAt(response.refreshed_at);
     } catch (err: any) {
-      setError(err.message || "Failed to load smart plug status");
+      setError(
+        err instanceof Error
+          ? getDisplayMessage(err)
+          : "Failed to load smart plug status",
+      );
     } finally {
       setLoading(false);
     }
@@ -40,7 +45,11 @@ export default function SmartPlugsPage() {
       await repo.setSmartPlugPower({ key: plug.key, on });
       await refresh();
     } catch (err: any) {
-      setError(err.message || "Failed to update smart plug power");
+      setError(
+        err instanceof Error
+          ? getDisplayMessage(err)
+          : "Failed to update smart plug power",
+      );
     } finally {
       setBusyKey(null);
     }
