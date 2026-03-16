@@ -128,3 +128,42 @@ def test_sample_indices_and_weights_matches_sample_from_indices_sequential() -> 
     torch.testing.assert_close(mb_full["indices"][:, 0], sampled_idx)
     torch.testing.assert_close(mb_full["advantages"], advantages[sampled_idx])
     torch.testing.assert_close(mb_full["sampled_mb"]["actions"], exp.buffer["actions"][sampled_idx])
+
+
+def test_sample_from_indices_empty_count_preserves_empty_shapes() -> None:
+    device = torch.device("cpu")
+
+    exp = Experience(
+        total_agents=4,
+        batch_size=8,
+        bptt_horizon=2,
+        minibatch_size=4,
+        max_minibatch_size=4,
+        experience_spec=Composite(
+            actions=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.int64),
+            rewards=UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32),
+        ),
+        device=device,
+    )
+
+    indices = torch.arange(4, dtype=torch.int64)
+    advantages = torch.zeros((4, 2), dtype=torch.float32)
+    sampling_config = TrainerConfig().sampling
+
+    mb = exp.sample_from_indices(
+        indices=indices,
+        ordered_indices=None,
+        count=0,
+        mb_idx=0,
+        advantages=advantages,
+        sampling_config=sampling_config,
+        epoch=0,
+        total_timesteps=0,
+        batch_size=exp.batch_size,
+    )
+
+    assert mb.batch_size == torch.Size([0, 2])
+    assert mb["sampled_mb"].batch_size == torch.Size([0, 2])
+    assert mb["indices"].shape == (0, 2)
+    assert mb["advantages"].shape == (0, 2)
+    assert mb["prio_weights"].shape == (0, 2)

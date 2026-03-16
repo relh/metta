@@ -378,11 +378,6 @@ class Experience:
         all_keys = set(self.buffer.keys(include_nested=True, leaves_only=True))
         return [key for key in self._REQUIRED_STORE_KEYS if key in all_keys]
 
-    def reset_store_keys(self) -> None:
-        """Reset store keys so that all spec keys are written on store."""
-        self._store_keys = list(self.buffer.keys(include_nested=True, leaves_only=True))
-        self._store_buffer = self.buffer.select(*self._store_keys)
-
     def sample_from_indices(
         self,
         *,
@@ -410,14 +405,6 @@ class Experience:
         )
 
         bptt_horizon = self.bptt_horizon
-        if sampled_idx.numel() == 0:
-            shared_loss_mb_data = TensorDict({}, batch_size=(0, bptt_horizon), device=device)
-            shared_loss_mb_data["sampled_mb"] = self.buffer[sampled_idx].clone()
-            shared_loss_mb_data["indices"] = sampled_idx[:, None].expand(-1, bptt_horizon)
-            shared_loss_mb_data["advantages"] = torch.empty((0, bptt_horizon), device=device, dtype=advantages.dtype)
-            shared_loss_mb_data["prio_weights"] = prio_weights
-            return shared_loss_mb_data
-
         minibatch = self.buffer[sampled_idx].clone()
         shared_loss_mb_data = TensorDict({}, batch_size=minibatch.batch_size, device=device)
         shared_loss_mb_data["prio_weights"] = prio_weights
