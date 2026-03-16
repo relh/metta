@@ -7,8 +7,6 @@ import {
   fetchDiagnoseManifest,
   type DiagnoseAxis,
   type DiagnoseAxisScore,
-  type DiagnoseDoctorNote,
-  type DiagnoseManifest,
   type DiagnosePrescription,
   type DiagnoseProbeDefinition,
   type DiagnoseProbeEvaluation,
@@ -32,41 +30,43 @@ function formatRatioPct(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`
 }
 
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : []
+}
+
 function byAxis<T extends { axis: DiagnoseAxis }>(items: T[]): Record<DiagnoseAxis, T[]> {
-  return {
-    stability: items.filter((item) => item.axis === 'stability'),
-    efficiency: items.filter((item) => item.axis === 'efficiency'),
-    control: items.filter((item) => item.axis === 'control'),
-    social_coordination: items.filter((item) => item.axis === 'social_coordination'),
+  const grouped: Record<DiagnoseAxis, T[]> = {
+    stability: [],
+    efficiency: [],
+    control: [],
+    social_coordination: [],
   }
+  for (const item of items) {
+    if (!(item.axis in grouped)) {
+      continue
+    }
+    grouped[item.axis].push(item)
+  }
+  return grouped
 }
 
 export default async function DiagnoseRunPage({ params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params
 
-  let manifest: DiagnoseManifest | null = null
-  try {
-    manifest = await fetchDiagnoseManifest(runId)
-  } catch {
-    manifest = null
-  }
-
-  let doctorNote: DiagnoseDoctorNote | null = null
-  try {
-    doctorNote = await fetchDiagnoseDoctorNote(runId)
-  } catch {
-    notFound()
-  }
+  const [manifest, doctorNote] = await Promise.all([
+    fetchDiagnoseManifest(runId).catch(() => null),
+    fetchDiagnoseDoctorNote(runId).catch(() => null),
+  ])
   if (doctorNote === null) {
     notFound()
   }
 
-  const axes = Array.isArray(doctorNote.axes) ? doctorNote.axes : []
-  const symptoms = Array.isArray(doctorNote.symptoms) ? doctorNote.symptoms : []
-  const prescriptions = Array.isArray(doctorNote.prescriptions) ? doctorNote.prescriptions : []
-  const probes = Array.isArray(doctorNote.stage1_probe_catalog) ? doctorNote.stage1_probe_catalog : []
-  const probeEvals = Array.isArray(doctorNote.stage1_probe_evaluations) ? doctorNote.stage1_probe_evaluations : []
-  const notes = Array.isArray(doctorNote.notes) ? doctorNote.notes : []
+  const axes = asArray(doctorNote.axes)
+  const symptoms = asArray(doctorNote.symptoms)
+  const prescriptions = asArray(doctorNote.prescriptions)
+  const probes = asArray(doctorNote.stage1_probe_catalog)
+  const probeEvals = asArray(doctorNote.stage1_probe_evaluations)
+  const notes = asArray(doctorNote.notes)
 
   const axisScores = Object.fromEntries(axes.map((axis) => [axis.axis, axis])) as Partial<
     Record<DiagnoseAxis, DiagnoseAxisScore>
@@ -75,7 +75,7 @@ export default async function DiagnoseRunPage({ params }: { params: Promise<{ ru
   const evalByProbeId = new Map<string, DiagnoseProbeEvaluation>(
     probeEvals.map((evaluation) => [evaluation.probe_id, evaluation])
   )
-  const artifactFiles = Array.isArray(manifest?.artifact_files) ? manifest.artifact_files : []
+  const artifactFiles = asArray(manifest?.artifact_files)
   const artifactList = [
     'manifest.json',
     'doctor_note.json',
