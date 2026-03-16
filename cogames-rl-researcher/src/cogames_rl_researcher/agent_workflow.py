@@ -8,30 +8,15 @@ from typing import Literal
 AgentName = Literal["codex", "claude"]
 WorkflowProfile = Literal["neophyte", "experienced"]
 
-PROMPT_BY_PROFILE: dict[WorkflowProfile, str] = {
-    "neophyte": "run-neophyte-workflow.md",
-    "experienced": "run-experienced-workflow.md",
-}
-
-REPORT_BY_PROFILE: dict[WorkflowProfile, Path] = {
-    "neophyte": Path("artifacts/ai_researcher/neophyte_workflow_report.md"),
-    "experienced": Path("artifacts/ai_researcher/experienced_workflow_report.md"),
-}
-
 AGENT_COMMANDS: dict[AgentName, list[str]] = {
     "codex": ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"],
     "claude": ["claude", "-p", "--verbose", "--dangerously-skip-permissions"],
 }
 
-TRAIN_STEPS_BY_PROFILE: dict[WorkflowProfile, int] = {
-    "neophyte": 2000,
-    "experienced": 3000,
-}
-
 
 def _find_repo_root() -> Path:
     this_file = Path(__file__).resolve()
-    for candidate in [this_file.parent, *this_file.parents]:
+    for candidate in this_file.parents:
         if (candidate / "cogames-rl-researcher" / "prompts").exists():
             return candidate
     raise RuntimeError("Could not find repo root containing cogames-rl-researcher/prompts")
@@ -39,7 +24,7 @@ def _find_repo_root() -> Path:
 
 def prompt_path_for_profile(profile: WorkflowProfile, repo_root: Path | None = None) -> Path:
     root = repo_root or _find_repo_root()
-    path = root / "cogames-rl-researcher" / "prompts" / PROMPT_BY_PROFILE[profile]
+    path = root / "cogames-rl-researcher" / "prompts" / f"run-{profile}-workflow.md"
     if not path.exists():
         raise FileNotFoundError(f"Prompt file not found: {path}")
     return path
@@ -51,7 +36,22 @@ def agent_command(agent: AgentName) -> list[str]:
 
 def report_path_for_profile(profile: WorkflowProfile, repo_root: Path | None = None) -> Path:
     root = repo_root or _find_repo_root()
-    return root / REPORT_BY_PROFILE[profile]
+    return root / "artifacts" / "ai_researcher" / f"{profile}_workflow_report.md"
+
+
+def _train_steps(profile: WorkflowProfile) -> int:
+    return 2000 if profile == "neophyte" else 3000
+
+
+def _run_agent_prompt(prompt_text: str, agent: AgentName, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        agent_command(agent),
+        input=prompt_text,
+        cwd=cwd,
+        capture_output=False,
+        text=True,
+        check=False,
+    )
 
 
 def run_agent_workflow(
@@ -61,16 +61,7 @@ def run_agent_workflow(
     repo_root: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     root = repo_root or _find_repo_root()
-    prompt_path = prompt_path_for_profile(profile, repo_root=root)
-    prompt_text = prompt_path.read_text(encoding="utf-8")
-    return subprocess.run(
-        agent_command(agent),
-        input=prompt_text,
-        cwd=root,
-        capture_output=False,
-        text=True,
-        check=False,
-    )
+    return _run_agent_prompt(prompt_path_for_profile(profile, repo_root=root).read_text(encoding="utf-8"), agent, root)
 
 
 def _report_generated(report_path: Path, baseline_mtime: float | None) -> bool:
@@ -84,7 +75,7 @@ def _report_generated(report_path: Path, baseline_mtime: float | None) -> bool:
 
 
 def _deterministic_fallback_script(profile: WorkflowProfile, report_relative_path: Path) -> str:
-    train_steps = TRAIN_STEPS_BY_PROFILE[profile]
+    train_steps = _train_steps(profile)
     report_path_str = report_relative_path.as_posix()
     return f"""set -euo pipefail
 mkdir -p artifacts/ai_researcher
@@ -232,17 +223,9 @@ def run_agent_workflow_until_report(
             f"The required report `{relative_report}` was not produced yet.\n"
             "Execute the remaining shell commands now and finish by writing that report."
         )
-        command = agent_command(agent)
         prompt = f"{prompt_text}\n\n{continuation_prompt}"
         print(f"Retrying workflow ({attempt}/{max_attempts})...")
-        result = subprocess.run(
-            command,
-            input=prompt,
-            cwd=root,
-            capture_output=False,
-            text=True,
-            check=False,
-        )
+        result = _run_agent_prompt(prompt, agent, root)
         if _report_generated(report_path, baseline_mtime):
             return 0
 
