@@ -79,22 +79,6 @@ class CheckpointManager:
         if require_remote_enabled and self._remote_prefix is None:
             raise ValueError("Remote checkpoints are required but remote prefix is not set")
 
-    def for_namespace(self, namespace: str) -> "CheckpointManager":
-        """Return a checkpoint manager for a run/URI namespace."""
-
-        if not namespace or not namespace.strip():
-            raise ValueError("checkpoint namespace cannot be empty")
-        if namespace == self.run_name:
-            return self
-        return CheckpointManager(
-            run=namespace,
-            system_cfg=self._system_cfg,
-            require_remote_enabled=self._require_remote_enabled,
-        )
-
-    def for_policy(self, policy_name: str) -> "CheckpointManager":
-        return self.for_namespace(policy_name)
-
     def _setup_remote_prefix(self, storage_decision: PolicyStorageDecision | None = None) -> None:
         if storage_decision is None:
             storage_decision = auto_policy_storage_decision(self.run_name)
@@ -142,7 +126,8 @@ class CheckpointManager:
             state_dict=state_dict,
         )
         if optimizer_state is not None:
-            self._write_optimizer_state(checkpoint_dir, optimizer_state)
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            self._atomic_torch_save(checkpoint_dir, OPTIMIZER_STATE_FILENAME, optimizer_state)
 
         if self._remote_prefix:
             remote_zip = f"{self.output_uri.rstrip('/')}/{checkpoint_dir.name}.zip"
@@ -177,10 +162,6 @@ class CheckpointManager:
             filename=OPTIMIZER_STATE_FILENAME,
             debug_label="optimizer state",
         )
-
-    def _write_optimizer_state(self, checkpoint_dir: Path, optimizer_state: dict[str, Any]) -> None:
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self._atomic_torch_save(checkpoint_dir, OPTIMIZER_STATE_FILENAME, optimizer_state)
 
     def load_trainer_state(self, policy_uri: str | None = None) -> Optional[Dict[str, Any]]:
         trainer_file = self.checkpoint_dir / "trainer_state.pt"

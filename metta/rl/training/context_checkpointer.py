@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 class ContextCheckpointer(TrainerComponent):
     """Persist and restore optimizer/timing state alongside policy checkpoints."""
 
-    trainer_attr = "trainer_checkpointer"
-
     def __init__(
         self,
         *,
