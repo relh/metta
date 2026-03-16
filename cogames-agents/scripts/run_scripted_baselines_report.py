@@ -32,9 +32,13 @@ from cogames.games.cogs_vs_clips.game.vibes import VibesVariant
 from cogames.games.cogs_vs_clips.missions.arena import make_arena_map_builder
 from cogames.games.cogs_vs_clips.missions.mission import CvCMission
 from cogames.games.cogs_vs_clips.train.reward_variants import apply_reward_variants
-from mettagrid.policy.loader import discover_and_register_policies
+from mettagrid.policy.loader import discover_and_register_policies, initialize_or_load_policy
 from mettagrid.policy.policy import PolicySpec
-from mettagrid.runner.rollout import run_episode_local
+from mettagrid.policy.policy_env_interface import PolicyEnvInterface
+from mettagrid.runner.rollout import resolve_env_for_seed, run_episode_local
+from mettagrid.runner.types import PureSingleEpisodeResult
+from mettagrid.simulator.rollout import Rollout
+from mettagrid.simulator.time_averaged_stats import TimeAveragedStatsHandler
 
 ELEMENTS = ("carbon", "oxygen", "germanium", "silicon")
 
@@ -311,11 +315,120 @@ def _role_uptime(cogs_stats: dict[str, Any], agent_stats: list[dict[str, float]]
     return 0.0
 
 
+def _policy_role(agent_policy: Any) -> str | None:
+    state = getattr(agent_policy, "_state", None)
+    if state is None:
+        return None
+
+    role = getattr(state, "role", None)
+    if role is None:
+        return None
+
+    role_value = getattr(role, "value", role)
+    return str(role_value)
+
+
+@dataclass(frozen=True)
+class RoleTransition:
+    step: int
+    agent_id: int
+    previous_role: str | None
+    current_role: str
+    counted: bool
+
+
+def _policy_role_vibe(agent_policy: Any) -> str | None:
+    state = getattr(agent_policy, "_state", None)
+    if state is None:
+        return None
+
+    current_vibe = getattr(state, "current_vibe", None)
+    if current_vibe is None:
+        return None
+
+    vibe = str(getattr(current_vibe, "value", current_vibe))
+    if vibe not in {"miner", "scout", "aligner", "scrambler"}:
+        return None
+    return vibe
+
+
+def _collect_role_transitions(
+    rollout: Rollout,
+    agent_policies: list[Any],
+) -> tuple[float, list[RoleTransition]]:
+    previous_roles = [_policy_role_vibe(agent_policy) for agent_policy in agent_policies]
+    role_switch_events = 0.0
+    transitions: list[RoleTransition] = []
+
+    while not rollout.is_done():
+        rollout.step()
+        current_roles = [_policy_role_vibe(agent_policy) for agent_policy in agent_policies]
+        step = int(rollout._sim.current_step)
+        for agent_id, (previous_role, current_role) in enumerate(zip(previous_roles, current_roles, strict=True)):
+            if current_role is None or current_role == previous_role:
+                continue
+
+            counted = previous_role is not None
+            if counted:
+                role_switch_events += 1.0
+            transitions.append(
+                RoleTransition(
+                    step=step,
+                    agent_id=agent_id,
+                    previous_role=previous_role,
+                    current_role=current_role,
+                    counted=counted,
+                )
+            )
+        previous_roles = current_roles
+
+    return role_switch_events, transitions
+
+
+def _run_episode_local_with_role_switches(
+    *,
+    policy_spec: PolicySpec,
+    env_cfg: Any,
+    seed: int,
+    device: str,
+) -> tuple[PureSingleEpisodeResult, float, list[RoleTransition]]:
+    env_for_rollout = resolve_env_for_seed(env_cfg, seed)
+    env_interface = PolicyEnvInterface.from_mg_cfg(env_for_rollout)
+    policy = initialize_or_load_policy(env_interface, policy_spec, device_override=device)
+    agent_policies = [policy.agent_policy(agent_id) for agent_id in range(env_for_rollout.game.num_agents)]
+    stats_handler = TimeAveragedStatsHandler()
+
+    rollout = Rollout(
+        env_for_rollout,
+        agent_policies,
+        policy_names=[policy_spec.name] * env_for_rollout.game.num_agents,
+        max_action_time_ms=10000,
+        render_mode="none",
+        autostart=False,
+        seed=seed,
+        event_handlers=[stats_handler],
+    )
+
+    role_switch_events, transitions = _collect_role_transitions(rollout, agent_policies)
+
+    results = PureSingleEpisodeResult(
+        rewards=list(rollout._sim.episode_rewards),
+        action_timeouts=list(rollout.timeout_counts),
+        stats=rollout._sim.episode_stats,
+        steps=rollout._sim.current_step,
+        time_averaged_game_stats=stats_handler.time_averaged_game_stats,
+        overage_exceeded_at=list(rollout.overage_exceeded_at),
+    )
+    return results, role_switch_events, transitions
+
+
 def _compute_kpis(
     role: str,
     agent_stats: list[dict[str, float]],
     hub_stats: dict[str, Any],
     steps: int,
+    *,
+    role_switch_events: float | None = None,
 ) -> dict[str, float]:
     cogs = hub_stats.get("cogs") or {}
     clips = hub_stats.get("clips") or {}
@@ -345,8 +458,8 @@ def _compute_kpis(
     clips_junction_lost = _sum_hub_stat(clips, "aligned.junction.lost")
     scramble_events = max(_sum_agent_stat(agent_stats, "junction.scrambled_by_agent"), clips_junction_lost)
 
-    role_switch_events_raw = _sum_agent_stat(agent_stats, "action.change_vibe.success")
-    role_switch_events = role_switch_events_raw
+    vibe_change_events = _sum_agent_stat(agent_stats, "action.change_vibe.success")
+    effective_role_switch_events = role_switch_events if role_switch_events is not None else vibe_change_events
 
     kpis: dict[str, float] = {
         "resources_per_step": total_element_gained / max(steps, 1),
@@ -362,16 +475,16 @@ def _compute_kpis(
         "scramble_events": scramble_events,
         "clips_junction_held": clips_junction_held,
         "clips_junction_suppression": max(0.0, 1.0 - (clips_junction_held / max(float(steps), 1.0))),
-        "role_switch_events": role_switch_events,
+        "role_switch_events": effective_role_switch_events,
     }
 
     if role == "gap_filler":
         role_uptime_by_role = {
             r: _role_uptime(cogs, agent_stats, r, steps) for r in ("miner", "scout", "aligner", "scrambler")
         }
-        setup_switches = 2.0 * float(len(agent_stats))
-        role_switch_events = max(role_switch_events_raw - setup_switches, 0.0)
-        kpis["role_switch_events"] = role_switch_events
+        if role_switch_events is None:
+            setup_switches = 2.0 * float(len(agent_stats))
+            kpis["role_switch_events"] = max(vibe_change_events - setup_switches, 0.0)
         role_coverage = sum(1.0 for r in role_uptime_by_role if _role_signal(agent_stats, r) > 0.0)
         kpis["role_coverage"] = role_coverage
         kpis["role_uptime"] = max(role_uptime_by_role.values(), default=0.0)
@@ -468,19 +581,34 @@ def _run_target_seed(target: BaselineTarget, seed: int) -> dict[str, Any]:
     env_cfg = mission.make_env()
     env_cfg.game.max_steps = target.max_steps
     spec = PolicySpec(class_path=target.policy, data_path=None, init_kwargs=target.init_kwargs)
-    results, _replay = run_episode_local(
-        policy_specs=[spec],
-        assignments=[0] * env_cfg.game.num_agents,
-        env=env_cfg,
-        seed=seed,
-        device="cpu",
-        render_mode="none",
-    )
+    role_switch_events: float | None = None
+    if target.role == "gap_filler":
+        results, role_switch_events, _transitions = _run_episode_local_with_role_switches(
+            policy_spec=spec,
+            env_cfg=env_cfg,
+            seed=seed,
+            device="cpu",
+        )
+    else:
+        results, _replay = run_episode_local(
+            policy_specs=[spec],
+            assignments=[0] * env_cfg.game.num_agents,
+            env=env_cfg,
+            seed=seed,
+            device="cpu",
+            render_mode="none",
+        )
 
     agent_stats = [dict(stats) for stats in (results.stats.get("agent") or [])]
     hub_stats = _extract_team_stats(results.stats)
     guardrails = _compute_guardrails(agent_stats)
-    kpis = _compute_kpis(target.role, agent_stats, hub_stats, int(results.steps))
+    kpis = _compute_kpis(
+        target.role,
+        agent_stats,
+        hub_stats,
+        int(results.steps),
+        role_switch_events=role_switch_events,
+    )
     fingerprint = _fingerprint(target.role, kpis, guardrails)
 
     role_rules = ROLE_KPI_RULES.get(target.role, ())
@@ -670,6 +798,7 @@ def _collect_role_conditional_reward_keys() -> dict[str, set[str]]:
         name="thread_vision_role_conditional_audit",
         description="Thread Vision shaped reward alignment audit",
         map_builder=make_arena_map_builder(num_agents=4),
+        num_agents=4,
         min_cogs=4,
         max_cogs=4,
         max_steps=100,
