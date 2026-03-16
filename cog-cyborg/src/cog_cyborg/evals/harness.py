@@ -190,7 +190,7 @@ def _deposit_candidate_score(
     state: MettagridState,
     entity: SemanticEntity,
     friendly_hubs: list[SemanticEntity],
-) -> tuple[int, int, str]:
+) -> tuple[int, int, int, int, str]:
     resource_total = _resource_total(entity)
     hub = _nearest_entity(entity.position.x, entity.position.y, friendly_hubs)
     distance = 9999 if hub is None else _distance(entity.position.x, entity.position.y, hub.position.x, hub.position.y)
@@ -201,7 +201,7 @@ def _deposit_candidate_score(
         entity.position.x,
         entity.position.y,
     )
-    return (-resource_total, distance, f"{role_bonus}:{self_distance}:{entity.entity_id}")
+    return (-resource_total, distance, role_bonus, self_distance, entity.entity_id)
 
 
 def _resource_total(entity: SemanticEntity) -> int:

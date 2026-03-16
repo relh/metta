@@ -129,6 +129,29 @@ def test_interview_probe_picks_best_teammate_to_deposit(cogsguard_env_info) -> N
     assert "carrying 5 resources" in answer.answer
 
 
+def test_interview_probe_breaks_deposit_ties_by_numeric_self_distance(cogsguard_env_info) -> None:
+    harness = _harness(cogsguard_env_info)
+    answer = harness.answer_probe(
+        InterviewProbeRequest(
+            question_type="best_teammate_to_deposit_now",
+            state=_build_state(
+                step=81,
+                role="aligner",
+                heart=0,
+                position=(9, 1),
+                visible_entities=[
+                    _friendly_hub(),
+                    _friendly_agent(entity_id="agent-2", x=10, y=1, role="miner", resources={"oxygen": 5}),
+                    _friendly_agent(entity_id="agent-3", x=0, y=11, role="miner", resources={"oxygen": 5}),
+                ],
+            ),
+        )
+    )
+
+    assert answer.subject_entity_id == "agent-2"
+    assert "carrying 5 resources" in answer.answer
+
+
 def test_interview_probe_explains_why_junction_is_not_a_good_target(cogsguard_env_info) -> None:
     harness = _harness(cogsguard_env_info)
     answer = harness.answer_probe(
