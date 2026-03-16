@@ -345,17 +345,12 @@ class LivePolicyBundleSession:
         plan_updated = False
         policy_update_error: str | None = None
         policy_update_exception: Exception | None = None
+        next_scratchpad: str | None = None
         if response.replace_scratchpad is not None and self._artifact_store is not None:
-            self._artifact_store.replace_scratchpad(
-                _merge_protected_scratchpad_keys(
-                    self._artifact_store.read_scratchpad(),
-                    response.replace_scratchpad,
-                )
+            next_scratchpad = _merge_protected_scratchpad_keys(
+                self._artifact_store.read_scratchpad(),
+                response.replace_scratchpad,
             )
-            scratchpad_updated = True
-        if response.replace_plan is not None and self._artifact_store is not None:
-            self._artifact_store.replace_plan(response.replace_plan)
-            plan_updated = True
         if response.set_policy:
             try:
                 self._set_policy_source(
@@ -378,6 +373,13 @@ class LivePolicyBundleSession:
                     error_message=f"{type(exc).__name__}: {exc}",
                     metadata=_merge_record_metadata(metadata, response.metadata),
                 )
+        if policy_update_exception is None and self._artifact_store is not None:
+            if next_scratchpad is not None:
+                self._artifact_store.replace_scratchpad(next_scratchpad)
+                scratchpad_updated = True
+            if response.replace_plan is not None:
+                self._artifact_store.replace_plan(response.replace_plan)
+                plan_updated = True
         self._register_trigger_names(trigger.name for trigger in response.triggers)
         if self._artifact_store is not None:
             policy_update_error = (
@@ -495,21 +497,33 @@ class LivePolicyBundleSession:
         metadata: dict[str, str | int | float | bool] | None,
     ) -> None:
         compiled = compile_policy(PolicyUpdate(source=policy_source))
+        if self._artifact_store is not None:
+            main_file = self._artifact_store.main_file
+            previous_main_source = (
+                None if main_file is None or not main_file.exists() else main_file.read_text(encoding="utf-8")
+            )
+            try:
+                self._artifact_store.write_main_source(policy_source)
+                self._artifact_store.append_generation_record(
+                    PolicyGenerationRecord(
+                        step=step,
+                        agent_id=agent_id,
+                        prompt=prompt,
+                        raw_response=raw_response,
+                        policy_source=policy_source,
+                        success=True,
+                        metadata={} if metadata is None else metadata,
+                    )
+                )
+            except Exception:
+                if main_file is not None:
+                    if previous_main_source is None:
+                        main_file.unlink(missing_ok=True)
+                    else:
+                        main_file.write_text(previous_main_source, encoding="utf-8")
+                raise
         self._compiled_policy = compiled
         self._policy_source = policy_source
-        if self._artifact_store is not None:
-            self._artifact_store.write_main_source(policy_source)
-            self._artifact_store.append_generation_record(
-                PolicyGenerationRecord(
-                    step=step,
-                    agent_id=agent_id,
-                    prompt=prompt,
-                    raw_response=raw_response,
-                    policy_source=policy_source,
-                    success=True,
-                    metadata={} if metadata is None else metadata,
-                )
-            )
 
     def _append_failed_generation_record(
         self,

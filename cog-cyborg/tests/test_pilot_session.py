@@ -643,7 +643,7 @@ def test_live_policy_bundle_session_debug_snapshot_tracks_registered_trigger_nam
     assert session.debug_snapshot()["registered_triggers"] == ["enemy_seen", "phase_shift"]
 
 
-def test_live_policy_bundle_session_records_failed_initial_policy_updates(tmp_path: Path) -> None:
+def test_live_policy_bundle_session_keeps_plan_and_scratchpad_when_initial_policy_update_fails(tmp_path: Path) -> None:
     store = ArtifactStore(
         main_file=tmp_path / "main.py",
         strategy_file=tmp_path / "plan.md",
@@ -672,11 +672,74 @@ def test_live_policy_bundle_session_records_failed_initial_policy_updates(tmp_pa
     assert record.error_message is not None
     assert "imports are not allowed" in record.error_message
     assert record.raw_response == '{"action":"policy","set_policy":"import os"}'
-    assert store.read_plan() == "# Plan\n- Avoid imports"
-    assert store.read_scratchpad() == "Attempted initial scratchpad update."
+    assert store.read_plan() == ""
+    assert store.read_scratchpad() == ""
     transcript = store.read_log_tail(max_chars=4000)
     assert "policy_update_error: BoundedPolicyError: imports are not allowed in sdk policy code" in transcript
     assert "llm_response:" in transcript
+
+
+def test_live_policy_bundle_session_rolls_back_partial_policy_artifacts_when_generation_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = ArtifactStore(
+        main_file=tmp_path / "main.py",
+        strategy_file=tmp_path / "plan.md",
+        scratchpad_file=tmp_path / "memory.md",
+        log_file=tmp_path / "transcript.log",
+        generation_file=tmp_path / "generation.jsonl",
+    )
+    backend = _FakeCodeBackend(
+        [
+            CodeReviewResponse(
+                action="policy",
+                set_policy='def step(sdk):\n    return {"role": "miner"}',
+            ),
+            CodeReviewResponse(
+                action="memory_and_policy",
+                set_policy='def step(sdk):\n    return {"role": "aligner"}',
+                replace_scratchpad="Attempted aligner pressure rewrite.",
+                replace_plan="# Plan\n- Switch into aligner pressure",
+            ),
+        ]
+    )
+    session = LivePolicyBundleSession(backend=backend, artifact_store=store)
+
+    initial = session.execute(sdk=_build_sdk(), prompt="write live policy", step=5, agent_id=0, goal="coverage")
+    assert initial.return_value == {"role": "miner"}
+    store.replace_plan("# Plan\n- Hold with miners")
+    store.replace_scratchpad("Hold east.")
+
+    append_calls = {"count": 0}
+    original_append_generation_record = store.append_generation_record
+
+    def fail_first_generation_append(record: PolicyGenerationRecord) -> None:
+        if append_calls["count"] == 0:
+            append_calls["count"] += 1
+            raise RuntimeError("disk full")
+        original_append_generation_record(record)
+
+    monkeypatch.setattr(store, "append_generation_record", fail_first_generation_append)
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        session.review(
+            prompt="rewrite live policy",
+            step=6,
+            agent_id=0,
+            trigger_name="enemy_seen",
+            goal="pressure",
+            request_summary="Enemy on east lane.",
+        )
+
+    assert store.read_main_source().endswith('return {"role": "miner"}')
+    assert store.read_plan() == "# Plan\n- Hold with miners"
+    assert store.read_scratchpad() == "Hold east."
+    failure_record = store.read_recent_generation_records(max_entries=1)[0]
+    assert failure_record.success is False
+    assert failure_record.error_message == "RuntimeError: disk full"
+
+    followup = session.execute(sdk=_build_sdk(step=7), prompt="continue", step=7, agent_id=0, goal="coverage")
+    assert followup.return_value == {"role": "miner"}
 
 
 def test_live_policy_bundle_session_debug_snapshot_captures_log_triggered_review() -> None:
