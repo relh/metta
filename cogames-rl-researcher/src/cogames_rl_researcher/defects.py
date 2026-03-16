@@ -86,10 +86,6 @@ class DefectFixAttempt(BaseModel):
     stderr_log: str
 
 
-class DefectIntakeConfig(BaseModel):
-    store_dir: Path = Path("./artifacts/ai_researcher/defects")
-
-
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -142,6 +138,11 @@ def _write_crash_defects(store_dir: Path, defects: list[CrashDefect]) -> None:
     store_dir.mkdir(parents=True, exist_ok=True)
     lines = [json.dumps(defect.model_dump(mode="json")) for defect in defects]
     _defects_path(store_dir).write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
+def _refresh_defect_views(store_dir: Path) -> None:
+    build_defect_backlog(store_dir)
+    build_defect_fix_plan(store_dir)
 
 
 def build_defect_backlog(store_dir: Path) -> DefectBacklog:
@@ -214,9 +215,10 @@ def submit_crash_defect(
     store_dir.mkdir(parents=True, exist_ok=True)
 
     likely_owner = _likely_owner(observed_error)
+    submitted_at = _utc_now()
     defect = CrashDefect(
-        defect_id=f"defect-{_utc_now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}",
-        submitted_at=_utc_now(),
+        defect_id=f"defect-{submitted_at.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}",
+        submitted_at=submitted_at,
         reporter=reporter,
         command=command,
         observed_error=observed_error,
@@ -232,8 +234,7 @@ def submit_crash_defect(
     defects = load_crash_defects(store_dir)
     defects.append(defect)
     _write_crash_defects(store_dir, defects)
-    build_defect_backlog(store_dir)
-    build_defect_fix_plan(store_dir)
+    _refresh_defect_views(store_dir)
     return defect
 
 
@@ -245,8 +246,7 @@ def set_defect_status(*, store_dir: Path, defect_id: str, status: DefectStatus) 
         updated = defect.model_copy(update={"status": status})
         defects[index] = updated
         _write_crash_defects(store_dir, defects)
-        build_defect_backlog(store_dir)
-        build_defect_fix_plan(store_dir)
+        _refresh_defect_views(store_dir)
         return updated
     raise ValueError(f"Defect not found: {defect_id}")
 
@@ -259,9 +259,7 @@ def validate_defect_fix(
     timeout_seconds: int = 900,
     mark_fixed_on_success: bool = False,
 ) -> DefectFixAttempt:
-    defects = load_crash_defects(store_dir)
-    matching = [defect for defect in defects if defect.defect_id == defect_id]
-    if not matching:
+    if not any(defect.defect_id == defect_id for defect in load_crash_defects(store_dir)):
         raise ValueError(f"Defect not found: {defect_id}")
 
     attempts_dir = store_dir / "fix_attempt_logs"
@@ -316,8 +314,7 @@ def validate_defect_fix(
     if attempt.status == "success" and mark_fixed_on_success:
         set_defect_status(store_dir=store_dir, defect_id=defect_id, status="fixed")
     else:
-        build_defect_backlog(store_dir)
-        build_defect_fix_plan(store_dir)
+        _refresh_defect_views(store_dir)
 
     return attempt
 
