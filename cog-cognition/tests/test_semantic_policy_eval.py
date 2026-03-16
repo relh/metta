@@ -1,6 +1,31 @@
 from __future__ import annotations
 
-from cog_cyborg.evals import BehavioralScenario, InterviewProbeRequest, SemanticPolicyEvaluationHarness
+from typing import get_args
+
+from cog_cognition.evals import (
+    SemanticBehavioralScenario,
+    SemanticInterviewProbeAnswer,
+    SemanticInterviewProbeRequest,
+    SemanticPolicyDecision,
+    SemanticPolicyEvaluationHarness,
+    SemanticProbeQuestion,
+    SemanticScenarioResult,
+    SemanticScenarioStepResult,
+)
+from cog_cyborg.evals import (
+    BehavioralScenario,
+    InterviewProbeAnswer,
+    InterviewProbeRequest,
+    ProbeQuestion,
+    ScenarioResult,
+    ScenarioStepResult,
+)
+from cog_cyborg.evals import (
+    SemanticPolicyDecision as LegacySemanticPolicyDecision,
+)
+from cog_cyborg.evals import (
+    SemanticPolicyEvaluationHarness as LegacySemanticPolicyEvaluationHarness,
+)
 from cog_cyborg.policy import MettagridSemanticPolicy
 from mettagrid_sdk.sdk import (
     GridPosition,
@@ -13,11 +38,37 @@ from mettagrid_sdk.sdk import (
 )
 
 
+def test_semantic_eval_public_exports() -> None:
+    assert SemanticPolicyEvaluationHarness.__name__ == "SemanticPolicyEvaluationHarness"
+    assert get_args(SemanticProbeQuestion) == (
+        "what_next",
+        "best_teammate_to_deposit_now",
+        "why_not_target",
+    )
+    assert SemanticBehavioralScenario.__name__ == "SemanticBehavioralScenario"
+    assert SemanticInterviewProbeRequest.__name__ == "SemanticInterviewProbeRequest"
+    assert SemanticInterviewProbeAnswer.__name__ == "SemanticInterviewProbeAnswer"
+    assert SemanticScenarioResult.__name__ == "SemanticScenarioResult"
+    assert SemanticScenarioStepResult.__name__ == "SemanticScenarioStepResult"
+    assert SemanticPolicyDecision.__name__ == "SemanticPolicyDecision"
+
+
+def test_legacy_cog_cyborg_eval_imports_alias_semantic_surface() -> None:
+    assert BehavioralScenario is SemanticBehavioralScenario
+    assert InterviewProbeRequest is SemanticInterviewProbeRequest
+    assert InterviewProbeAnswer is SemanticInterviewProbeAnswer
+    assert ScenarioResult is SemanticScenarioResult
+    assert ScenarioStepResult is SemanticScenarioStepResult
+    assert LegacySemanticPolicyDecision is SemanticPolicyDecision
+    assert LegacySemanticPolicyEvaluationHarness is SemanticPolicyEvaluationHarness
+    assert get_args(ProbeQuestion) == get_args(SemanticProbeQuestion)
+
+
 def test_behavioral_scenarios_cover_role_workflows(cogsguard_env_info) -> None:
     harness = _harness(cogsguard_env_info)
 
     aligner = harness.run_scenario(
-        BehavioralScenario(
+        SemanticBehavioralScenario(
             name="aligner-heart-capture",
             states=[
                 _build_state(
@@ -39,7 +90,7 @@ def test_behavioral_scenarios_cover_role_workflows(cogsguard_env_info) -> None:
         )
     )
     miner = harness.run_scenario(
-        BehavioralScenario(
+        SemanticBehavioralScenario(
             name="miner-gather-deposit",
             states=[
                 _build_state(
@@ -59,7 +110,7 @@ def test_behavioral_scenarios_cover_role_workflows(cogsguard_env_info) -> None:
         )
     )
     scrambler = harness.run_scenario(
-        BehavioralScenario(
+        SemanticBehavioralScenario(
             name="scrambler-neutralize",
             states=[
                 _build_state(
@@ -91,7 +142,7 @@ def test_behavioral_scenarios_cover_role_workflows(cogsguard_env_info) -> None:
 def test_interview_probe_answers_next_action(cogsguard_env_info) -> None:
     harness = _harness(cogsguard_env_info)
     answer = harness.answer_probe(
-        InterviewProbeRequest(
+        SemanticInterviewProbeRequest(
             question_type="what_next",
             state=_build_state(
                 step=70,
@@ -104,13 +155,13 @@ def test_interview_probe_answers_next_action(cogsguard_env_info) -> None:
     )
 
     assert answer.summary == "acquire_heart"
-    assert "Execute acquire_heart next as aligner." == answer.answer
+    assert answer.answer == "Execute acquire_heart next as aligner."
 
 
 def test_interview_probe_picks_best_teammate_to_deposit(cogsguard_env_info) -> None:
     harness = _harness(cogsguard_env_info)
     answer = harness.answer_probe(
-        InterviewProbeRequest(
+        SemanticInterviewProbeRequest(
             question_type="best_teammate_to_deposit_now",
             state=_build_state(
                 step=80,
@@ -155,7 +206,7 @@ def test_interview_probe_breaks_deposit_ties_by_numeric_self_distance(cogsguard_
 def test_interview_probe_explains_why_junction_is_not_a_good_target(cogsguard_env_info) -> None:
     harness = _harness(cogsguard_env_info)
     answer = harness.answer_probe(
-        InterviewProbeRequest(
+        SemanticInterviewProbeRequest(
             question_type="why_not_target",
             state=_build_state(
                 step=90,

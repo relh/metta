@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from cog_cyborg.policy.semantic_cog import SemanticCogAgentPolicy
 from mettagrid_sdk.sdk import MettagridState, SemanticEntity
 
-from cog_cyborg.evals.models import (
-    BehavioralScenario,
-    InterviewProbeAnswer,
-    InterviewProbeRequest,
-    ScenarioResult,
-    ScenarioStepResult,
+from cog_cognition.evals.semantic_models import (
+    SemanticBehavioralScenario,
+    SemanticInterviewProbeAnswer,
+    SemanticInterviewProbeRequest,
     SemanticPolicyDecision,
+    SemanticScenarioResult,
+    SemanticScenarioStepResult,
 )
-from cog_cyborg.policy.semantic_cog import SemanticCogAgentPolicy
 
 _NON_RESOURCE_ITEMS = {
     "agent_id",
@@ -30,17 +30,17 @@ class SemanticPolicyEvaluationHarness:
     def __init__(self, policy: SemanticCogAgentPolicy) -> None:
         self._policy = policy
 
-    def run_scenario(self, scenario: BehavioralScenario) -> ScenarioResult:
+    def run_scenario(self, scenario: SemanticBehavioralScenario) -> SemanticScenarioResult:
         self._policy.reset()
         steps = [
-            ScenarioStepResult(
+            SemanticScenarioStepResult(
                 step_index=index,
                 state_step=state.step,
                 decision=self.evaluate_state(state),
             )
             for index, state in enumerate(scenario.states)
         ]
-        return ScenarioResult(name=scenario.name, steps=steps)
+        return SemanticScenarioResult(name=scenario.name, steps=steps)
 
     def evaluate_state(self, state: MettagridState) -> SemanticPolicyDecision:
         action = self._policy.evaluate_state(state)
@@ -53,7 +53,7 @@ class SemanticPolicyEvaluationHarness:
             target_position=str(self._policy.infos.get("target_position", "")),
         )
 
-    def answer_probe(self, request: InterviewProbeRequest) -> InterviewProbeAnswer:
+    def answer_probe(self, request: SemanticInterviewProbeRequest) -> SemanticInterviewProbeAnswer:
         self._policy.reset()
         decision = self.evaluate_state(request.state)
         if request.question_type == "what_next":
@@ -63,8 +63,8 @@ class SemanticPolicyEvaluationHarness:
         return _why_not_target_answer(request, decision)
 
 
-def _what_next_answer(decision: SemanticPolicyDecision) -> InterviewProbeAnswer:
-    return InterviewProbeAnswer(
+def _what_next_answer(decision: SemanticPolicyDecision) -> SemanticInterviewProbeAnswer:
+    return SemanticInterviewProbeAnswer(
         question_type="what_next",
         answer=f"Execute {decision.summary} next as {decision.role}.",
         role=decision.role,
@@ -77,7 +77,7 @@ def _what_next_answer(decision: SemanticPolicyDecision) -> InterviewProbeAnswer:
 def _best_teammate_to_deposit_answer(
     state: MettagridState,
     decision: SemanticPolicyDecision,
-) -> InterviewProbeAnswer:
+) -> SemanticInterviewProbeAnswer:
     team_id = state.team_summary.team_id if state.team_summary is not None else ""
     friendly_hubs = [
         entity for entity in state.visible_entities if entity.entity_type == "hub" and "friendly" in entity.labels
@@ -92,7 +92,7 @@ def _best_teammate_to_deposit_answer(
         and _resource_total(entity) > 0
     ]
     if not teammate_candidates:
-        return InterviewProbeAnswer(
+        return SemanticInterviewProbeAnswer(
             question_type="best_teammate_to_deposit_now",
             answer="No visible teammate is currently positioned to deposit resources better than the current agent.",
             role=decision.role,
@@ -112,7 +112,7 @@ def _best_teammate_to_deposit_answer(
         distance = _distance(teammate.position.x, teammate.position.y, hub.position.x, hub.position.y)
         distance_text = f"{distance} tiles from {hub.entity_id}"
         reasons.append(distance_text)
-    return InterviewProbeAnswer(
+    return SemanticInterviewProbeAnswer(
         question_type="best_teammate_to_deposit_now",
         answer=(
             f"{teammate.entity_id} is best positioned to deposit now because it is "
@@ -126,12 +126,12 @@ def _best_teammate_to_deposit_answer(
 
 
 def _why_not_target_answer(
-    request: InterviewProbeRequest,
+    request: SemanticInterviewProbeRequest,
     decision: SemanticPolicyDecision,
-) -> InterviewProbeAnswer:
+) -> SemanticInterviewProbeAnswer:
     target_entity = _entity_by_id(request.state, request.target_entity_id)
     if target_entity is None:
-        return InterviewProbeAnswer(
+        return SemanticInterviewProbeAnswer(
             question_type="why_not_target",
             answer="That target is not currently visible, so it is not a safe immediate target.",
             role=decision.role,
@@ -144,7 +144,7 @@ def _why_not_target_answer(
     if not reasons:
         reasons.append("current_policy_has_better_semantic_fit")
 
-    return InterviewProbeAnswer(
+    return SemanticInterviewProbeAnswer(
         question_type="why_not_target",
         answer=f"{target_entity.entity_id} is not the best target right now because {'; '.join(reasons)}.",
         role=decision.role,
@@ -192,14 +192,16 @@ def _deposit_candidate_score(
     friendly_hubs: list[SemanticEntity],
 ) -> tuple[int, int, int, int, str]:
     resource_total = _resource_total(entity)
-    hub = _nearest_entity(entity.position.x, entity.position.y, friendly_hubs)
-    distance = 9999 if hub is None else _distance(entity.position.x, entity.position.y, hub.position.x, hub.position.y)
+    teammate_x = entity.position.x
+    teammate_y = entity.position.y
+    hub = _nearest_entity(teammate_x, teammate_y, friendly_hubs)
+    distance = 9999 if hub is None else _distance(teammate_x, teammate_y, hub.position.x, hub.position.y)
     role_bonus = 0 if str(entity.attributes.get("role", "")) == "miner" else 1
     self_distance = _distance(
         state.self_state.position.x,
         state.self_state.position.y,
-        entity.position.x,
-        entity.position.y,
+        teammate_x,
+        teammate_y,
     )
     return (-resource_total, distance, role_bonus, self_distance, entity.entity_id)
 
