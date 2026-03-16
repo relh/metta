@@ -149,6 +149,42 @@ def test_behavioral_scenarios_cover_failure_modes() -> None:
     assert empty_deposit.steps[0].decision.plan.active_subtask.kind == "collect_resources"
 
 
+def test_behavioral_scenarios_reset_planner_state_between_runs() -> None:
+    harness = PlannerEvaluationHarness()
+    first = harness.run_scenario(
+        BehavioralScenario(
+            name="first",
+            states=[
+                _build_state(
+                    step=10,
+                    role="aligner",
+                    heart=0,
+                    visible_entities=[_friendly_hub(), _neutral_junction()],
+                )
+            ],
+        ),
+        MemoryStore(),
+    )
+    second = harness.run_scenario(
+        BehavioralScenario(
+            name="second",
+            states=[
+                _build_state(
+                    step=40,
+                    role="aligner",
+                    heart=0,
+                    visible_entities=[_friendly_hub(), _neutral_junction()],
+                )
+            ],
+        ),
+        MemoryStore(),
+    )
+
+    assert first.steps[0].decision.mode == "replan"
+    assert second.steps[0].decision.mode == "replan"
+    assert second.steps[0].decision.plan.agenda_id != first.steps[0].decision.plan.agenda_id
+
+
 def test_interview_probe_answers_next_action_and_abandon_triggers() -> None:
     store = MemoryStore()
     harness = PlannerEvaluationHarness()

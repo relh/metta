@@ -36,6 +36,9 @@ class HierarchicalPlanner:
     def current_plan(self) -> AgendaPlan | None:
         return self._current_plan
 
+    def reset(self) -> None:
+        self._current_plan = None
+
     def decide(
         self,
         state: MettagridState,

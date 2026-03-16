@@ -43,6 +43,7 @@ class PlannerEvaluationHarness:
         *,
         persist_store: MemoryStore | None = None,
     ) -> ScenarioResult:
+        self._planner.reset()
         steps = []
         for index, state in enumerate(scenario.states):
             decision = self._planner.decide(state, memory, persist_store=persist_store)
@@ -56,6 +57,7 @@ class PlannerEvaluationHarness:
         *,
         persist_store: MemoryStore | None = None,
     ) -> InterviewProbeAnswer:
+        self._planner.reset()
         decision = self._planner.decide(request.state, memory, persist_store=persist_store)
         if request.question_type == "what_next":
             return _what_next_answer(request, decision)
