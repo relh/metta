@@ -11,11 +11,11 @@ For an end-to-end runbook, see `cogames-agents/docs/scripted-baselines-howto.md`
 Runs every registered scripted agent through `cogames scrimmage` and saves per-agent JSON results.
 
 ```bash
-# Run all agents (defaults: 10 episodes, 1000 steps, cogsguard_arena.basic)
+# Run all agents (defaults: 10 episodes, 1000 steps, arena)
 ./scripts/benchmark_agents.sh
 
 # Custom run
-./scripts/benchmark_agents.sh -e 20 -s 2000 -m cogsguard_arena.basic -o ./my_results
+./scripts/benchmark_agents.sh -e 20 -s 2000 -m arena -o ./my_results
 
 # Subset of agents
 ./scripts/benchmark_agents.sh -a role,baseline,wombo -e 50
@@ -27,7 +27,7 @@ Runs every registered scripted agent through `cogames scrimmage` and saves per-a
 | -------- | ----------------------- | -------------------------- |
 | `-e`     | 10                      | Episodes per agent         |
 | `-s`     | 1000                    | Max steps per episode      |
-| `-m`     | `cogsguard_arena.basic` | Mission                    |
+| `-m`     | `arena`                 | Mission                    |
 | `-o`     | `./benchmark_results`   | Output directory           |
 | `-a`     | all agents              | Comma-separated agent list |
 | `--seed` | 42                      | RNG seed                   |
@@ -56,8 +56,8 @@ python scripts/compare_agents.py ./benchmark_results/20260128_143000 --format js
 | `reward`                  | per-episode avg                               | Average agent reward       |
 | `heart.gained`            | `env_agent/heart.gained`                      | Hearts collected           |
 | `heart.lost`              | `env_agent/heart.lost`                        | Hearts consumed            |
-| `aligned.junction.held`   | `env_collective/cogs/aligned.junction.held`   | Junctions held             |
-| `aligned.junction.gained` | `env_collective/cogs/aligned.junction.gained` | Junctions aligned          |
+| `aligned.junction.held`   | `avg_game_stats["cogs/aligned.junction.held"]`   | Junctions held             |
+| `aligned.junction.gained` | `avg_game_stats["cogs/aligned.junction.gained"]` | Junctions aligned          |
 | `action_timeouts`         | policy summary                                | Action generation timeouts |
 
 ### `quick_eval.sh`

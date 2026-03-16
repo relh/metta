@@ -8,7 +8,7 @@
 # Options:
 #   -e EPISODES   Number of episodes per agent (default: 10)
 #   -s STEPS      Max steps per episode (default: 1000)
-#   -m MISSION    Mission to evaluate (default: cogsguard_arena.basic)
+#   -m MISSION    Mission to evaluate (default: arena)
 #   -o OUTDIR     Output directory for results (default: ./benchmark_results)
 #   -a AGENTS     Comma-separated agent list (default: all registered agents)
 #   --seed SEED   Base RNG seed (default: 42)
@@ -18,7 +18,7 @@ set -euo pipefail
 # Defaults
 EPISODES=10
 STEPS=1000
-MISSION="cogsguard_arena.basic"
+MISSION="arena"
 OUTDIR="./benchmark_results"
 SEED=42
 AGENTS=""
@@ -114,7 +114,7 @@ for agent in "${AGENT_LIST[@]}"; do
   AGENT_OUT="${RUN_DIR}/${agent}.json"
   echo "--- Evaluating: $agent ---"
 
-  if cogames scrimmage \
+  if uv run cogames scrimmage \
     -m "$MISSION" \
     -p "$agent" \
     -e "$EPISODES" \
@@ -142,5 +142,5 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [[ -f "${SCRIPT_DIR}/compare_agents.py" ]]; then
   echo "Generating comparison table..."
-  python "${SCRIPT_DIR}/compare_agents.py" "$RUN_DIR"
+  uv run python "${SCRIPT_DIR}/compare_agents.py" "$RUN_DIR"
 fi

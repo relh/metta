@@ -15,14 +15,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-LOG_FILE="${REPO_ROOT}/cogames-agents/docs/eval-results-log.md"
-BASELINE_FILE="${REPO_ROOT}/scripts/.eval_baseline.json"
-RESULTS_DIR="${REPO_ROOT}/.eval_results"
+AGENTS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+LOG_FILE="${AGENTS_ROOT}/docs/eval-results-log.md"
+BASELINE_FILE="${AGENTS_ROOT}/scripts/.eval_baseline.json"
+RESULTS_DIR="${AGENTS_ROOT}/.eval_results"
+UV_PROJECT=(uv run --project "$AGENTS_ROOT")
 
 # Defaults
 POLICY="cogsguard"
-MISSION="cogsguard_arena.basic"
+MISSION="arena"
 EPISODES=10
 STEPS=1000
 SEED=42
@@ -38,7 +39,7 @@ Options:
   --policy POLICY     Policy short name (default: cogsguard)
   --episodes N        Number of episodes (default: 10)
   --steps N           Max steps per episode (default: 1000)
-  --mission MISSION   Mission to evaluate (default: cogsguard_arena.basic)
+  --mission MISSION   Mission to evaluate (default: arena)
   --params PARAMS     URI params (e.g. 'miner=2&aligner=4&scrambler=3')
   --seed SEED         RNG seed (default: 42)
   --label LABEL       Optional label for the log entry (e.g. git SHA, branch)
@@ -98,7 +99,7 @@ fi
 
 # Auto-detect label from git if not provided
 if [[ -z "$LABEL" ]]; then
-  LABEL="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2> /dev/null || echo 'unknown')"
+  LABEL="$(git -C "$AGENTS_ROOT" rev-parse --short HEAD 2> /dev/null || echo 'unknown')"
 fi
 
 TIMESTAMP=$(date +%Y-%m-%dT%H:%M:%S)
@@ -121,7 +122,7 @@ TMPOUT=$(mktemp)
 trap 'rm -f "$TMPOUT"' EXIT
 
 echo "Running cogames scrimmage..."
-if ! cogames scrimmage \
+if ! "${UV_PROJECT[@]}" cogames scrimmage \
   -m "$MISSION" \
   -p "$POLICY_URI" \
   -e "$EPISODES" \
@@ -139,7 +140,7 @@ echo "Results saved to $RESULT_FILE"
 echo ""
 
 # --- Step 2: Extract metrics and check regression ---
-python3 "$SCRIPT_DIR/regression_check.py" \
+PYTHONPATH="${AGENTS_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${UV_PROJECT[@]}" python "$SCRIPT_DIR/regression_check.py" \
   --result "$RESULT_FILE" \
   --baseline "$BASELINE_FILE" \
   --label "$LABEL" \
@@ -150,33 +151,24 @@ RC=$?
 
 # --- Step 3: Append to log ---
 if [[ "$SKIP_LOG" != true ]]; then
-  python3 - "$RESULT_FILE" "$LOG_FILE" "$LABEL" "$TIMESTAMP" "$POLICY_URI" "$PARAMS" << 'PYEOF'
+  PYTHONPATH="${AGENTS_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${UV_PROJECT[@]}" python - "$RESULT_FILE" "$LOG_FILE" "$LABEL" "$TIMESTAMP" "$POLICY_URI" "$PARAMS" << 'PYEOF'
 import json, sys
 from pathlib import Path
+
+from cogames_agents.eval_result_metrics import extract_cogsguard_eval_metrics, parse_eval_result_text
 
 result_path, log_path, label, timestamp, policy_uri, params = sys.argv[1:7]
 
 with open(result_path) as f:
-    data = json.load(f)
+    data = parse_eval_result_text(f.read())
 
 missions = data.get("missions", [])
 if not missions:
     print("WARN: No missions in result, skipping log")
     sys.exit(0)
 
-mission = missions[0]
-summary = mission.get("mission_summary", mission)
-game_stats = summary.get("avg_game_stats", {})
-policy_summaries = summary.get("policy_summaries", [])
-policy = policy_summaries[0] if policy_summaries else {}
-agent_metrics = policy.get("avg_agent_metrics", {})
-
-per_ep = policy.get("per_episode_per_policy_avg_rewards", {})
-if per_ep:
-    vals = [v for v in per_ep.values() if v is not None]
-    reward = sum(vals) / len(vals) if vals else None
-else:
-    reward = agent_metrics.get("reward")
+metrics = extract_cogsguard_eval_metrics(data)
+reward = metrics.get("reward")
 
 def fmt(v):
     if v is None:
@@ -185,11 +177,11 @@ def fmt(v):
         return f"{v:.2f}"
     return str(v)
 
-ajh = game_stats.get("junction.held")
-ajg = game_stats.get("junction.gained")
-hg = agent_metrics.get("heart.gained")
-hl = agent_metrics.get("heart.lost")
-timeouts = policy.get("action_timeouts")
+ajh = metrics.get("aligned.junction.held")
+ajg = metrics.get("aligned.junction.gained")
+hg = metrics.get("heart.gained")
+hl = metrics.get("heart.lost")
+timeouts = metrics.get("action_timeouts")
 
 log = Path(log_path)
 entry = (

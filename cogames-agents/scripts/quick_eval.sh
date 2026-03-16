@@ -8,7 +8,7 @@
 #   ./scripts/quick_eval.sh role
 #   ./scripts/quick_eval.sh nlanky -e 5 -s 500
 #   ./scripts/quick_eval.sh baseline --json
-#   ./scripts/quick_eval.sh role -m cogsguard_arena.basic --seed 99
+#   ./scripts/quick_eval.sh role -m arena --seed 99
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ if [[ $# -lt 1 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
   echo "Options:"
   echo "  -e EPISODES        Number of episodes (default: 3)"
   echo "  -s STEPS           Max steps per episode (default: 500)"
-  echo "  -m MISSION         Mission (default: cogsguard_arena.basic)"
+  echo "  -m MISSION         Mission (default: arena)"
   echo "  --seed SEED        RNG seed (default: 42)"
   echo "  --json             Output JSON instead of table"
   echo "  --gui              Launch MettaScope GUI viewer"
@@ -34,7 +34,7 @@ shift
 # Defaults (small for fast iteration)
 EPISODES=3
 STEPS=500
-MISSION="cogsguard_arena.basic"
+MISSION="arena"
 SEED=42
 FORMAT_FLAG=""
 RENDER=""
@@ -76,14 +76,14 @@ echo "Quick eval: $AGENT on $MISSION ($EPISODES eps, $STEPS steps)"
 echo ""
 
 if [[ -n "$RENDER" ]]; then
-  exec cogames play \
+  exec uv run cogames play \
     -m "$MISSION" \
     -p "$AGENT" \
     -r "$RENDER" \
     -s "$STEPS" \
     --seed "$SEED"
 else
-  exec cogames scrimmage \
+  exec uv run cogames scrimmage \
     -m "$MISSION" \
     -p "$AGENT" \
     -e "$EPISODES" \

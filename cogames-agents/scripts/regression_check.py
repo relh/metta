@@ -19,51 +19,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from cogames_agents.eval_result_metrics import extract_cogsguard_eval_metrics, parse_eval_result_text
+
 # Metrics to track: (key, source, higher_is_better, regression_tolerance_pct)
-# source: "game" = avg_game_stats, "agent" = avg_agent_metrics, "policy" = policy-level
 TRACKED_METRICS = [
-    ("junction.held", "game", True, 5.0),
-    ("junction.gained", "game", True, 5.0),
-    ("reward", "reward", True, 10.0),
-    ("heart.gained", "agent", True, 10.0),
-    ("heart.lost", "agent", False, 10.0),  # lower is better
-    ("action_timeouts", "policy", False, 20.0),  # lower is better
+    ("aligned.junction.held", "derived", True, 5.0),
+    ("aligned.junction.gained", "derived", True, 5.0),
+    ("reward", "derived", True, 10.0),
+    ("heart.gained", "derived", True, 10.0),
+    ("heart.lost", "derived", False, 10.0),  # lower is better
+    ("action_timeouts", "derived", False, 20.0),  # lower is better
 ]
 
 
 def extract_metrics(data: dict) -> dict[str, float | None]:
     """Extract tracked metrics from cogames scrimmage JSON output."""
-    missions = data.get("missions", [])
-    if not missions:
-        return {}
-
-    mission = missions[0]
-    summary = mission.get("mission_summary", mission)
-    game_stats = summary.get("avg_game_stats", {})
-    policy_summaries = summary.get("policy_summaries", [])
-    policy = policy_summaries[0] if policy_summaries else {}
-    agent_metrics = policy.get("avg_agent_metrics", {})
-
-    per_ep = policy.get("per_episode_per_policy_avg_rewards", {})
-
-    result: dict[str, float | None] = {}
-    for key, source, _hib, _tol in TRACKED_METRICS:
-        if source == "game":
-            result[key] = game_stats.get(key)
-        elif source == "agent":
-            result[key] = agent_metrics.get(key)
-        elif source == "policy":
-            result[key] = policy.get(key)
-        elif source == "reward":
-            if per_ep:
-                vals = [v for v in per_ep.values() if v is not None]
-                result[key] = sum(vals) / len(vals) if vals else None
-            else:
-                result[key] = agent_metrics.get("reward")
-
-    return result
+    derived = extract_cogsguard_eval_metrics(data)
+    return {key: derived.get(key) for key, _source, _hib, _tol in TRACKED_METRICS}
 
 
 def fmt(v: float | None) -> str:
@@ -177,8 +154,7 @@ def main() -> int:
         print(f"ERROR: Result file not found: {result_path}")
         return 1
 
-    with open(result_path) as f:
-        result_data = json.load(f)
+    result_data = parse_eval_result_text(result_path.read_text())
 
     current = extract_metrics(result_data)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tune_cogas.sh — Run eval_cogas.sh with multiple role distributions to find
-# the optimal configuration.
+# the optimal aligned.junction.held configuration.
 #
 # Usage:
 #   ./scripts/tune_cogas.sh [OPTIONS]
@@ -17,7 +17,7 @@ EVAL_SCRIPT="${SCRIPT_DIR}/eval_cogas.sh"
 
 # Defaults
 POLICY="cogsguard"
-MISSION="cogsguard_arena.basic"
+MISSION="arena"
 EPISODES=10
 STEPS=1000
 SEED=42
@@ -46,8 +46,8 @@ Options:
   --policy POLICY       Policy short name (default: cogsguard)
   --episodes N          Number of episodes per config (default: 10)
   --steps N             Max steps per episode (default: 1000)
-  --mission MISSION     Mission (default: cogsguard_arena.basic)
-  --threshold N         Pass threshold for junction.held (default: 1500)
+  --mission MISSION     Mission (default: arena)
+  --threshold N         Pass threshold for aligned.junction.held (default: 1500)
   --seed SEED           RNG seed (default: 42)
   --configs FILE        File with one param string per line (overrides defaults)
   -h, --help            Show this help
@@ -145,13 +145,13 @@ for i in "${!CONFIGS[@]}"; do
     status="FAIL"
   fi
 
-  # Extract junction.held from output
+  # Extract aligned.junction.held from output
   score=$(grep -oP 'aligned\.junction\.held:\s+\K[0-9.]+' "$TMPLOG" 2> /dev/null | head -1 || true)
   if [[ -z "$score" ]]; then
     score="-"
   fi
 
-  echo "  junction.held = $score [$status]"
+  echo "  aligned.junction.held = $score [$status]"
   echo ""
 
   RESULT_PARAMS+=("$label")
@@ -185,7 +185,7 @@ echo "------------------------------------------------------------"
 if [[ -n "$best_idx" ]]; then
   echo ""
   echo "BEST: ${RESULT_PARAMS[$best_idx]}"
-  echo "  junction.held = $best_score"
+  echo "  aligned.junction.held = $best_score"
   if [[ "${RESULT_PARAMS[$best_idx]}" != "<default>" ]]; then
     echo "  URI: metta://policy/${POLICY}?${RESULT_PARAMS[$best_idx]}"
   else

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # eval_cogas.sh — Run cogas agent through local evaluation and report
-# junction.held score.
+# aligned.junction.held score.
 #
 # Usage:
 #   ./scripts/eval_cogas.sh [OPTIONS]
@@ -14,10 +14,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+AGENTS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+UV_PROJECT=(uv run --project "$AGENTS_ROOT")
 
 # Defaults
 POLICY="cogsguard"
-MISSION="cogsguard_arena.basic"
+MISSION="arena"
 EPISODES=10
 STEPS=1000
 SEED=42
@@ -33,9 +35,9 @@ Options:
   --policy POLICY     Policy short name (default: cogsguard)
   --episodes N        Number of episodes (default: 10)
   --steps N           Max steps per episode (default: 1000)
-  --mission MISSION   Mission to evaluate (default: cogsguard_arena.basic)
+  --mission MISSION   Mission to evaluate (default: arena)
   --params PARAMS     URI params (e.g. 'miner=2&aligner=4&scrambler=3')
-  --threshold N       junction.held threshold (default: 1500)
+  --threshold N       aligned.junction.held threshold (default: 1500)
   --seed SEED         RNG seed (default: 42)
   -h, --help          Show this help
 USAGE
@@ -92,14 +94,14 @@ echo "Mission:   $MISSION"
 echo "Episodes:  $EPISODES"
 echo "Steps:     $STEPS"
 echo "Seed:      $SEED"
-echo "Threshold: $THRESHOLD (junction.held)"
+echo "Threshold: $THRESHOLD (aligned.junction.held)"
 echo ""
 
 # Run cogames scrimmage and capture JSON output
 TMPOUT=$(mktemp)
 trap 'rm -f "$TMPOUT"' EXIT
 
-if ! cogames scrimmage \
+if ! "${UV_PROJECT[@]}" cogames scrimmage \
   -m "$MISSION" \
   -p "$POLICY_URI" \
   -e "$EPISODES" \
@@ -113,40 +115,29 @@ if ! cogames scrimmage \
 fi
 
 # Parse metrics from JSON output
-python3 - "$TMPOUT" "$THRESHOLD" << 'PYEOF'
+PYTHONPATH="${AGENTS_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" "${UV_PROJECT[@]}" python - "$TMPOUT" "$THRESHOLD" << 'PYEOF'
 import json, sys
+
+from cogames_agents.eval_result_metrics import extract_cogsguard_eval_metrics, parse_eval_result_text
 
 tmpout = sys.argv[1]
 threshold = float(sys.argv[2])
 
 with open(tmpout) as f:
-    data = json.load(f)
+    data = parse_eval_result_text(f.read())
 
 missions = data.get("missions", [])
 if not missions:
     print("ERROR: No mission results in output")
     sys.exit(1)
 
-mission = missions[0]
-summary = mission.get("mission_summary", mission)
-game_stats = summary.get("avg_game_stats", {})
-policy_summaries = summary.get("policy_summaries", [])
-policy = policy_summaries[0] if policy_summaries else {}
-agent_metrics = policy.get("avg_agent_metrics", {})
-per_ep = policy.get("per_episode_per_policy_avg_rewards", {})
-
-# Extract key metrics
-ajh = game_stats.get("junction.held")
-ajg = game_stats.get("junction.gained")
-hg = agent_metrics.get("heart.gained")
-hl = agent_metrics.get("heart.lost")
-timeouts = policy.get("action_timeouts")
-
-if per_ep:
-    vals = [v for v in per_ep.values() if v is not None]
-    reward = sum(vals) / len(vals) if vals else agent_metrics.get("reward")
-else:
-    reward = agent_metrics.get("reward")
+metrics = extract_cogsguard_eval_metrics(data)
+ajh = metrics.get("aligned.junction.held")
+ajg = metrics.get("aligned.junction.gained")
+hg = metrics.get("heart.gained")
+hl = metrics.get("heart.lost")
+reward = metrics.get("reward")
+timeouts = metrics.get("action_timeouts")
 
 def fmt(v):
     if v is None:
@@ -157,8 +148,8 @@ def fmt(v):
 
 # Print summary table
 print("=== Results ===")
-print(f"  junction.held:   {fmt(ajh)}")
-print(f"  junction.gained: {fmt(ajg)}")
+print(f"  aligned.junction.held:   {fmt(ajh)}")
+print(f"  aligned.junction.gained: {fmt(ajg)}")
 print(f"  heart.gained:            {fmt(hg)}")
 print(f"  heart.lost:              {fmt(hl)}")
 print(f"  reward:                  {fmt(reward)}")
@@ -167,11 +158,11 @@ print()
 
 # Threshold check
 if ajh is not None and ajh < threshold:
-    print(f"FAIL: junction.held ({fmt(ajh)}) < threshold ({threshold})")
+    print(f"FAIL: aligned.junction.held ({fmt(ajh)}) < threshold ({threshold})")
     sys.exit(1)
 elif ajh is None:
-    print("WARN: junction.held not found in output")
+    print("WARN: aligned.junction.held not found in output")
     sys.exit(1)
 else:
-    print(f"PASS: junction.held ({fmt(ajh)}) >= threshold ({threshold})")
+    print(f"PASS: aligned.junction.held ({fmt(ajh)}) >= threshold ({threshold})")
 PYEOF
