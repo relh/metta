@@ -637,6 +637,8 @@ version = "0.1.0"
 source = { editable = "cog-cognition" }
 dependencies = [
     { name = "cog-cyborg" },
+    { name = "cogames" },
+    { name = "mettagrid" },
     { name = "mettagrid-sdk" },
     { name = "pydantic" },
 ]
@@ -644,6 +646,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cog-cyborg", editable = "cog-cyborg" },
+    { name = "cogames", editable = "packages/cogames" },
+    { name = "mettagrid", editable = "packages/mettagrid" },
     { name = "mettagrid-sdk", editable = "mettagrid-sdk" },
     { name = "pydantic", specifier = ">=2.12.2" },
 ]

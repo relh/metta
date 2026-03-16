@@ -4,7 +4,7 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from cog_cyborg.analysis.trajectory import (
+    from cog_cognition.analysis.trajectory import (
         AgentMotifSummary,
         ResourceVector,
         RoleCounts,
@@ -38,5 +38,5 @@ __all__ = [
 def __getattr__(name: str) -> Any:
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    trajectory = importlib.import_module("cog_cyborg.analysis.trajectory")
+    trajectory = importlib.import_module("cog_cognition.analysis.trajectory")
     return getattr(trajectory, name)

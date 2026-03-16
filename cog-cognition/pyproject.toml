@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Optional cognition layers for Mettagrid policies"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["cog-cyborg", "mettagrid-sdk", "pydantic>=2.12.2"]
+dependencies = ["cog-cyborg", "cogames", "mettagrid", "mettagrid-sdk", "pydantic>=2.12.2"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -29,4 +29,6 @@ source = ["cog_cognition"]
 
 [tool.uv.sources]
 cog-cyborg = { workspace = true }
+cogames = { workspace = true }
+mettagrid = { workspace = true }
 mettagrid-sdk = { workspace = true }

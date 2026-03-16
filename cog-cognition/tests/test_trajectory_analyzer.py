@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from cog_cyborg.analysis.trajectory import (
+from cog_cognition.analysis import analyze_cogsguard_policy as exported_analyze_cogsguard_policy
+from cog_cognition.analysis.trajectory import (
     AgentMotifSummary,
     ResourceVector,
     RoleCounts,
@@ -14,6 +15,10 @@ from cog_cyborg.analysis.trajectory import (
 )
 
 from mettagrid.policy.policy import PolicySpec
+
+
+def test_analysis_package_exports_trajectory_analyzer() -> None:
+    assert exported_analyze_cogsguard_policy is analyze_cogsguard_policy
 
 
 def test_analyze_cogsguard_policy_returns_live_checkpoints() -> None:

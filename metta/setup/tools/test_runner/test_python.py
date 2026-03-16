@@ -67,6 +67,7 @@ PACKAGES: tuple[Package, ...] = (
     Package(name="agent", target=Path("agent/tests")),
     Package(name="app_backend", target=Path("app_backend/tests")),
     Package(name="common", target=Path("common/tests")),
+    Package(name="cog-cognition", target=Path("cog-cognition/tests")),
     Package(name="cogames", target=Path("packages/cogames/tests")),
     Package(name="cogames-agents", target=Path("cogames-agents/tests")),
     Package(name="gitta", target=Path("packages/gitta/tests")),
