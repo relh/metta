@@ -1,4 +1,4 @@
-from cogames.games.cogs_vs_clips.game.clips.clips import ClipsConfig, ClipsVariant
+from cogames.games.cogs_vs_clips.game.clips.clips import ClipsConfig, ClipsVariant, ClipsWaveOnlyVariant
 from cogames.games.cogs_vs_clips.game.clips.ship import (
     CLIPS_SHIP_MAP_NAME,
     CvCShipConfig,
@@ -13,6 +13,7 @@ __all__ = [
     "CLIPS_SHIP_MAP_NAME",
     "ClipsConfig",
     "ClipsVariant",
+    "ClipsWaveOnlyVariant",
     "CvCShipConfig",
     "add_clips_ships_to_map_config",
     "clips_ship_map_names_in_map_config",

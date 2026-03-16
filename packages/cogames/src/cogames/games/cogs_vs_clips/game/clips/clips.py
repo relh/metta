@@ -183,3 +183,34 @@ class ClipsVariant(CoGameMissionVariant):
             map_builder=env.game.map_builder,
         )
         env.game.events.update(clips_events)
+
+
+class ClipsWaveOnlyVariant(CoGameMissionVariant):
+    """Configure clips to launch the initial wave without any follow-up spread."""
+
+    name: str = "clips_wave_only"
+    description: str = "Initial clips wave only, no further spread."
+
+    @override
+    def dependencies(self) -> Deps:
+        return Deps(required=[ClipsVariant])
+
+    @override
+    def configure(self, deps: ResolvedDeps) -> None:
+        clips_variant = deps.required(ClipsVariant)
+        disable_start = 10**9
+        clips_variant.clips_config.initial_clips_start = 10
+        clips_variant.clips_config.initial_clips_spots = 3
+        clips_variant.clips_config.scramble_start = disable_start
+        clips_variant.clips_config.scramble_interval = disable_start
+        clips_variant.clips_config.align_start = disable_start
+        clips_variant.clips_config.align_interval = disable_start
+        clips_variant.clips_config.scramble_radius = 25
+        if clips_variant.clips is not None:
+            clips_variant.clips.initial_clips_start = 10
+            clips_variant.clips.initial_clips_spots = 3
+            clips_variant.clips.scramble_start = disable_start
+            clips_variant.clips.scramble_interval = disable_start
+            clips_variant.clips.align_start = disable_start
+            clips_variant.clips.align_interval = disable_start
+            clips_variant.clips.scramble_radius = 25

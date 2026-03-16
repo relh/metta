@@ -193,7 +193,6 @@ class TestCogsguardCurriculum:
         assert tool.sim.env.game.max_steps == 987
 
 
-@pytest.mark.skip(reason="clips_wave_only variant not yet migrated to games.cogs_vs_clips")
 def test_wave_only_variant_disables_followup_events() -> None:
     env_config = cogsguard.make_env(num_agents=4, max_steps=100, variants="clips_wave_only")
     events = env_config.game.events
