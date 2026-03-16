@@ -5,9 +5,12 @@ import os
 from pathlib import Path
 from typing import Any, cast
 
+import cog_cyborg.policy.anthropic_pilot as pilot_policy_mod
+import cog_cyborg.runtime.anthropic_pilot as pilot_runtime_mod
 from cog_cyborg.memory import MemoryStore
-from cog_cyborg.policy.anthropic_pilot import AnthropicCyborgPolicy, AnthropicPilotAgentPolicy, AnthropicPilotSession
+from cog_cyborg.policy.anthropic_pilot import AnthropicCyborgPolicy, AnthropicPilotAgentPolicy
 from cog_cyborg.runtime import ArtifactStore
+from cog_cyborg.runtime.anthropic_pilot import AnthropicPilotSession
 from mettagrid_sdk.sdk import (
     GridPosition,
     LogRecord,
@@ -160,6 +163,21 @@ def _build_state(
         team_summary=TeamSummary(team_id="cogs", shared_inventory={} if shared_inventory is None else shared_inventory),
         recent_events=[] if recent_events is None else recent_events,
     )
+
+
+def test_policy_anthropic_pilot_reexports_runtime_surface() -> None:
+    assert pilot_policy_mod.AnthropicPilotSession is pilot_runtime_mod.AnthropicPilotSession
+    assert pilot_policy_mod.DEFAULT_GOAL == pilot_runtime_mod.DEFAULT_GOAL
+    assert pilot_policy_mod.DEFAULT_MAX_TOKENS == pilot_runtime_mod.DEFAULT_MAX_TOKENS
+    assert (
+        pilot_policy_mod.DEFAULT_PILOT_POLICY_TIMEOUT_SECONDS == pilot_runtime_mod.DEFAULT_PILOT_POLICY_TIMEOUT_SECONDS
+    )
+    assert pilot_policy_mod.DEFAULT_POLICY_TIMEOUT_SECONDS == pilot_runtime_mod.DEFAULT_POLICY_TIMEOUT_SECONDS
+    assert pilot_policy_mod.DEFAULT_TEMPERATURE == pilot_runtime_mod.DEFAULT_TEMPERATURE
+    assert pilot_policy_mod.SharedPilotContext is pilot_runtime_mod.SharedPilotContext
+    assert pilot_policy_mod.build_pilot_artifact_store is pilot_runtime_mod.build_pilot_artifact_store
+    assert pilot_policy_mod.build_pilot_memory_store is pilot_runtime_mod.build_pilot_memory_store
+    assert pilot_policy_mod.coerce_bool_arg is pilot_runtime_mod.coerce_bool_arg
 
 
 def test_anthropic_pilot_session_generates_typed_directives() -> None:
