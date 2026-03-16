@@ -204,7 +204,7 @@ def load_pantheon_stories() -> tuple[list[PantheonStory], str | None]:
 
 
 def create_pantheon_router() -> APIRouter:
-    router = APIRouter(prefix="/dashboard/v1/pantheon", tags=["dashboard"])
+    router = APIRouter(prefix="/pantheon/v1", tags=["pantheon"])
 
     @router.get("/stories")
     @timed_http_handler

@@ -11,12 +11,12 @@ from fastapi.responses import JSONResponse
 from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
 from vibeservatory.backend.dashboard_backend.bardo.router import create_bardo_router
 from vibeservatory.backend.dashboard_backend.chatprop.router import create_chatprop_router
-from vibeservatory.backend.dashboard_backend.cogames_diagnose.router import create_cogames_diagnose_router
 from vibeservatory.backend.dashboard_backend.config import settings
 from vibeservatory.backend.dashboard_backend.database import configure_dashboard_db
+from vibeservatory.backend.dashboard_backend.diagnose.router import create_diagnose_router
 from vibeservatory.backend.dashboard_backend.pantheon.router import create_pantheon_router
+from vibeservatory.backend.dashboard_backend.policy_dashboard.router import create_policy_dashboard_router
 from vibeservatory.backend.dashboard_backend.role_stats.router import create_role_stats_router
-from vibeservatory.backend.dashboard_backend.state_page.router import create_dashboard_router
 from vibeservatory.backend.dashboard_backend.trainboard.router import create_trainboard_router
 
 
@@ -36,6 +36,14 @@ def _load_required_route_paths_from_contract() -> frozenset[str]:
 
 
 REQUIRED_ROUTE_PATHS = _load_required_route_paths_from_contract()
+SURFACE_ROUTER_FACTORIES = (
+    create_policy_dashboard_router,
+    create_bardo_router,
+    create_pantheon_router,
+    create_chatprop_router,
+    create_trainboard_router,
+    create_diagnose_router,
+)
 
 
 def _assert_required_routes(app: FastAPI) -> None:
@@ -49,7 +57,7 @@ def create_app() -> FastAPI:
     configure_dashboard_db()
 
     app = FastAPI(
-        title="Dashboard API",
+        title="Vibeservatory Surface API",
         version="0.1.0",
         docs_url=None,
         redoc_url=None,
@@ -67,12 +75,10 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(GZipMiddleware, minimum_size=settings.DASHBOARD_GZIP_MIN_SIZE)
 
-    app.include_router(create_dashboard_router())
-    app.include_router(create_bardo_router())
-    app.include_router(create_chatprop_router())
-    app.include_router(create_trainboard_router())
-    app.include_router(create_cogames_diagnose_router())
-    app.include_router(create_pantheon_router())
+    # The six embedded Vibeservatory surfaces are peer services. Each owns its
+    # own route namespace and frontend host path, while sharing this backend app.
+    for router_factory in SURFACE_ROUTER_FACTORIES:
+        app.include_router(router_factory())
     app.include_router(create_role_stats_router())
     _assert_required_routes(app)
 

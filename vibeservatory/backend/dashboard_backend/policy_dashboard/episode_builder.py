@@ -6,7 +6,7 @@ from uuid import UUID
 
 from metta.app_backend.models.job_request import JobStatus
 from metta.app_backend.queries import policy_queries
-from vibeservatory.backend.dashboard_backend.state_page.diagnostics import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.diagnostics import (
     DashboardEpisode,
     compute_episode_behavior_tags,
     compute_episode_diagnostic_tags,

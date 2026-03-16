@@ -15,29 +15,29 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     RESOURCES,
     metric_presence_aliases,
     metric_present,
     metric_value,
     safe_div,
 )
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     action_success_rate as kpi_action_success_rate,
 )
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     action_success_total as kpi_action_success_total,
 )
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     junction_control_rate as kpi_junction_control_rate,
 )
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     move_efficiency as kpi_move_efficiency,
 )
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     noop_rate as kpi_noop_rate,
 )
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     resource_retention as kpi_resource_retention,
 )
 

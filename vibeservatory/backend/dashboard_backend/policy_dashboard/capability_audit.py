@@ -7,7 +7,10 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
-from vibeservatory.backend.dashboard_backend.state_page.diagnostics import CapabilityCodeAudit, CapabilityCodeStatus
+from vibeservatory.backend.dashboard_backend.policy_dashboard.diagnostics import (
+    CapabilityCodeAudit,
+    CapabilityCodeStatus,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _SKIP_DIR_NAMES = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
@@ -292,9 +295,9 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
             [
                 (
                     "doctor-note endpoint",
-                    "vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py::get_doctor_note",
+                    "vibeservatory/backend/dashboard_backend/diagnose/router.py::get_doctor_note",
                     _has_python_function(
-                        "vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py", "get_doctor_note"
+                        "vibeservatory/backend/dashboard_backend/diagnose/router.py", "get_doctor_note"
                     ),
                 ),
                 (
@@ -343,9 +346,10 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
             [
                 (
                     "derived KPI diagnostics generator",
-                    "vibeservatory/backend/dashboard_backend/state_page/diagnostics.py::compute_derived_metrics",
+                    "vibeservatory/backend/dashboard_backend/policy_dashboard/diagnostics.py::compute_derived_metrics",
                     _has_python_function(
-                        "vibeservatory/backend/dashboard_backend/state_page/diagnostics.py", "compute_derived_metrics"
+                        "vibeservatory/backend/dashboard_backend/policy_dashboard/diagnostics.py",
+                        "compute_derived_metrics",
                     ),
                 ),
                 (
@@ -360,17 +364,17 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
             [
                 (
                     "instrumentation coverage computation",
-                    "vibeservatory/backend/dashboard_backend/state_page/diagnostics.py::compute_instrumentation_validation",
+                    "vibeservatory/backend/dashboard_backend/policy_dashboard/diagnostics.py::compute_instrumentation_validation",
                     _has_python_function(
-                        "vibeservatory/backend/dashboard_backend/state_page/diagnostics.py",
+                        "vibeservatory/backend/dashboard_backend/policy_dashboard/diagnostics.py",
                         "compute_instrumentation_validation",
                     ),
                 ),
                 (
                     "instrumentation summary included in dashboard response",
-                    "vibeservatory/backend/dashboard_backend/state_page/router.py",
+                    "vibeservatory/backend/dashboard_backend/policy_dashboard/router.py",
                     _contains_all(
-                        "vibeservatory/backend/dashboard_backend/state_page/router.py",
+                        "vibeservatory/backend/dashboard_backend/policy_dashboard/router.py",
                         "compute_instrumentation_validation(",
                     ),
                 ),
@@ -386,17 +390,17 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
             [
                 (
                     "behavior tag computation",
-                    "vibeservatory/backend/dashboard_backend/state_page/diagnostics.py::compute_episode_behavior_tags",
+                    "vibeservatory/backend/dashboard_backend/policy_dashboard/diagnostics.py::compute_episode_behavior_tags",
                     _has_python_function(
-                        "vibeservatory/backend/dashboard_backend/state_page/diagnostics.py",
+                        "vibeservatory/backend/dashboard_backend/policy_dashboard/diagnostics.py",
                         "compute_episode_behavior_tags",
                     ),
                 ),
                 (
                     "behavior tags attached to episodes",
-                    "vibeservatory/backend/dashboard_backend/state_page/episode_builder.py",
+                    "vibeservatory/backend/dashboard_backend/policy_dashboard/episode_builder.py",
                     _contains_all(
-                        "vibeservatory/backend/dashboard_backend/state_page/episode_builder.py",
+                        "vibeservatory/backend/dashboard_backend/policy_dashboard/episode_builder.py",
                         "behavior_tags = compute_episode_behavior_tags",
                     ),
                 ),

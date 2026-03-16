@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vibeservatory.backend.dashboard_backend.state_page.kpi_math import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.kpi_math import (
     action_success_total,
     metric_presence_aliases,
     metric_present,

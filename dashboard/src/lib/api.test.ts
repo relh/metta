@@ -63,11 +63,11 @@ describe('dashboard api', () => {
 
     expect(response.policy.id).toBe(DASHBOARD_RESPONSE.policy.id)
     expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/policies/versions/default/data')
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/policy-dashboard/v1/policies/versions/default/data')
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('include=')
-    expect(String(fetchMock.mock.calls[1][0])).toContain('/dashboard/v1/policies/versions/default')
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/policy-dashboard/v1/policies/versions/default')
     expect(String(fetchMock.mock.calls[2][0])).toContain(
-      `/dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/data`
+      `/policy-dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/data`
     )
     expect(String(fetchMock.mock.calls[2][0])).not.toContain('include=')
   })
@@ -96,7 +96,7 @@ describe('dashboard api', () => {
     await fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
 
     expect(String(fetchMock.mock.calls[0][0])).toContain(
-      `/dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/data`
+      `/policy-dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/data`
     )
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('include=')
   })
@@ -159,7 +159,7 @@ describe('dashboard api', () => {
     const response = await fetchPantheonStories()
 
     expect(response.stories).toEqual([])
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/pantheon/stories')
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/pantheon/v1/stories')
   })
 
   it('posts dashboard analysis with a trimmed anthropic header', async () => {
@@ -172,7 +172,7 @@ describe('dashboard api', () => {
 
     expect(response.analysis).toBe('looks good')
     expect(String(fetchMock.mock.calls[0][0])).toContain(
-      `/dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/analysis`
+      `/policy-dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/analysis`
     )
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit
     const headers = requestInit.headers as Record<string, string>
@@ -187,7 +187,7 @@ describe('dashboard api', () => {
 
     await uploadDiagnoseBundle(new File(['zip-data'], 'bundle.zip', { type: 'application/zip' }))
 
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/cogames-diagnose/runs/upload')
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/diagnose/v1/runs/upload')
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit
     const headers = requestInit.headers as Record<string, string>
     expect(requestInit.method).toBe('POST')

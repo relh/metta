@@ -1,4 +1,4 @@
-"""Dashboard routes for policy performance analysis."""
+"""Policy dashboard routes for single-policy performance analysis."""
 
 import ast
 import asyncio
@@ -32,12 +32,11 @@ from vibeservatory.backend.dashboard_backend.anthropic_client import (
     request_bedrock_message,
 )
 from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
-from vibeservatory.backend.dashboard_backend.cogames_diagnose.router import list_run_summaries
 from vibeservatory.backend.dashboard_backend.database import db_session
-from vibeservatory.backend.dashboard_backend.role_stats.queries import ROLE_METRICS, compute_policy_role_percentiles
-from vibeservatory.backend.dashboard_backend.state_page import diagnostics as claude_dashboard
-from vibeservatory.backend.dashboard_backend.state_page.capability_audit import build_capability_code_audit
-from vibeservatory.backend.dashboard_backend.state_page.diagnostics import (
+from vibeservatory.backend.dashboard_backend.diagnose.router import list_run_summaries
+from vibeservatory.backend.dashboard_backend.policy_dashboard import diagnostics as claude_dashboard
+from vibeservatory.backend.dashboard_backend.policy_dashboard.capability_audit import build_capability_code_audit
+from vibeservatory.backend.dashboard_backend.policy_dashboard.diagnostics import (
     DashboardDerived,
     DashboardDiagnoseRunSummary,
     DashboardEpisode,
@@ -66,7 +65,8 @@ from vibeservatory.backend.dashboard_backend.state_page.diagnostics import (
     compute_unsupported_state,
     compute_version_trend_summary,
 )
-from vibeservatory.backend.dashboard_backend.state_page.episode_builder import build_dashboard_episodes
+from vibeservatory.backend.dashboard_backend.policy_dashboard.episode_builder import build_dashboard_episodes
+from vibeservatory.backend.dashboard_backend.role_stats.queries import ROLE_METRICS, compute_policy_role_percentiles
 
 logger = logging.getLogger(__name__)
 
@@ -456,8 +456,8 @@ async def _fetch_and_summarize_replays(episode_ids: list[str], policy_version_id
     return summaries
 
 
-def create_dashboard_router() -> APIRouter:
-    router = APIRouter(prefix="/dashboard/v1/policies/versions", tags=["dashboard"])
+def create_policy_dashboard_router() -> APIRouter:
+    router = APIRouter(prefix="/policy-dashboard/v1/policies/versions", tags=["policy-dashboard"])
 
     @router.get("/default/data")
     @timed_http_handler

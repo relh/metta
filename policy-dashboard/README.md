@@ -1,7 +1,7 @@
 # Policy Dashboard Surface
 
-`policy-dashboard` is one of the six Vibeservatory surfaces (embedded by Observatory).
-This folder is surface documentation only; the canonical frontend code package is `dashboard/`.
+`policy-dashboard` is one of the six Vibeservatory surfaces (embedded by Observatory). This folder is surface
+documentation only; the canonical frontend code package is `dashboard/`.
 
 ## Canonical Host Path
 
@@ -14,8 +14,10 @@ This folder is surface documentation only; the canonical frontend code package i
 
 ## Backend (Vibeservatory)
 
-- Canonical API route: `/dashboard/v1/policies/versions/default/data`
-- Backend implementation: `vibeservatory/backend/dashboard_backend/state_page/router.py`
+- Canonical API route: `/policy-dashboard/v1/policies/versions/default/data`
+- Backend implementation: `vibeservatory/backend/dashboard_backend/policy_dashboard/router.py`
+- Ownership model: this surface owns its backend namespace as a peer to `bardo`, `pantheon`, `diagnose`, `chatprop`, and
+  `trainboard`, rather than living under a generic shared dashboard route bucket.
 
 ## Deployment Model
 

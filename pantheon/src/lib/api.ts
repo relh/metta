@@ -158,5 +158,5 @@ export type PantheonStoriesResponse = {
 }
 
 export async function fetchPantheonStories(): Promise<PantheonStoriesResponse> {
-  return await dashboardRequest<PantheonStoriesResponse>('/dashboard/v1/pantheon/stories')
+  return await dashboardRequest<PantheonStoriesResponse>('/pantheon/v1/stories')
 }

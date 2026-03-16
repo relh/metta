@@ -4,7 +4,7 @@
 
 ## Canonical Host Path
 
-- `https://vibeservatory.softmax-research.net/pantheon/v0`
+- `https://vibeservatory.softmax-research.net/pantheon`
 
 ## Frontend
 
@@ -15,7 +15,7 @@
 
 ## Backend (Vibeservatory)
 
-- Canonical API route: `/dashboard/v1/pantheon/stories`
+- Canonical API route: `/pantheon/v1/stories`
 - Backend implementation: `vibeservatory/backend/dashboard_backend/pantheon/router.py`
 
 ## Deployment Model

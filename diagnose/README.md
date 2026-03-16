@@ -15,8 +15,8 @@
 
 ## Backend (Vibeservatory)
 
-- Canonical API route: `/dashboard/v1/cogames-diagnose/runs`
-- Backend implementation: `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
+- Canonical API route: `/diagnose/v1/runs`
+- Backend implementation: `vibeservatory/backend/dashboard_backend/diagnose/router.py`
 
 ## Deployment Model
 

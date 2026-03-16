@@ -313,27 +313,23 @@ async function dashboardRequest<T>(
 }
 
 export async function fetchDiagnoseRuns(): Promise<DiagnoseRunsResponse> {
-  return await dashboardRequest<DiagnoseRunsResponse>('/dashboard/v1/cogames-diagnose/runs')
+  return await dashboardRequest<DiagnoseRunsResponse>('/diagnose/v1/runs')
 }
 
 export async function fetchDiagnoseManifest(runId: string): Promise<DiagnoseManifest> {
-  return await dashboardRequest<DiagnoseManifest>(
-    `/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/manifest`
-  )
+  return await dashboardRequest<DiagnoseManifest>(`/diagnose/v1/runs/${encodeURIComponent(runId)}/manifest`)
 }
 
 export async function fetchDiagnoseDoctorNote(runId: string): Promise<DiagnoseDoctorNote> {
-  return await dashboardRequest<DiagnoseDoctorNote>(
-    `/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/doctor-note`
-  )
+  return await dashboardRequest<DiagnoseDoctorNote>(`/diagnose/v1/runs/${encodeURIComponent(runId)}/doctor-note`)
 }
 
 export async function uploadDiagnoseBundle(bundle: File): Promise<DiagnoseUploadResponse> {
   const formData = new FormData()
   formData.append('bundle', bundle)
-  return await dashboardRequest<DiagnoseUploadResponse>('/dashboard/v1/cogames-diagnose/runs/upload', 'POST', formData)
+  return await dashboardRequest<DiagnoseUploadResponse>('/diagnose/v1/runs/upload', 'POST', formData)
 }
 
 export function diagnoseArtifactUrl(runId: string, artifact: string): string {
-  return `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifact)}`
+  return `${DASHBOARD_API_BASE_URL}/diagnose/v1/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifact)}`
 }

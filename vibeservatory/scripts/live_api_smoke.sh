@@ -118,7 +118,7 @@ printf '%s\n' "-----------------------+-------+---------------------------------
 
 # data
 file_data="$tmpdir/data.json"
-code="$(request GET "/dashboard/v1/policies/versions/$POLICY_VERSION_ID/data" '' "$file_data")"
+code="$(request GET "/policy-dashboard/v1/policies/versions/$POLICY_VERSION_ID/data" '' "$file_data")"
 if [[ "$code" == "200" ]]; then
   print_row "data endpoint" "PASS" "$(json_value "$file_data" policy), episodes=$(json_value "$file_data" episodes)"
 else
@@ -128,7 +128,7 @@ fi
 
 # role percentiles
 file_roles="$tmpdir/roles.json"
-code="$(request GET "/dashboard/v1/policies/versions/$POLICY_VERSION_ID/role-percentiles" '' "$file_roles")"
+code="$(request GET "/policy-dashboard/v1/policies/versions/$POLICY_VERSION_ID/role-percentiles" '' "$file_roles")"
 if [[ "$code" == "200" ]]; then
   rows="$(json_value "$file_roles" rows)"
   if [[ "$rows" == "0" ]]; then
@@ -144,7 +144,7 @@ fi
 
 # diagnose runs
 file_diag="$tmpdir/diagnose.json"
-code="$(request GET "/dashboard/v1/cogames-diagnose/runs" '' "$file_diag")"
+code="$(request GET "/diagnose/v1/runs" '' "$file_diag")"
 if [[ "$code" == "200" ]]; then
   runs="$(json_value "$file_diag" runs)"
   if [[ "$runs" == "0" ]]; then
@@ -160,7 +160,7 @@ fi
 
 # analysis
 file_analysis="$tmpdir/analysis.json"
-code="$(request POST "/dashboard/v1/policies/versions/$POLICY_VERSION_ID/analysis" '{}' "$file_analysis")"
+code="$(request POST "/policy-dashboard/v1/policies/versions/$POLICY_VERSION_ID/analysis" '{}' "$file_analysis")"
 detail="$(json_value "$file_analysis" detail)"
 if [[ "$code" == "200" ]]; then
   print_row "analysis" "PASS" "analysis endpoint returned content"

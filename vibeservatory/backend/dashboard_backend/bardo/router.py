@@ -389,9 +389,9 @@ def _clear_bardo_world_state_cache() -> None:
 
 
 def create_bardo_router() -> APIRouter:
-    router = APIRouter(tags=["dashboard"])
+    router = APIRouter(prefix="/bardo/v1", tags=["bardo"])
 
-    @router.get("/bardo/v1/world-state")
+    @router.get("/world-state")
     @timed_http_handler
     async def get_world_state(
         request: Request,

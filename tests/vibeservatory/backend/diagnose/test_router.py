@@ -9,11 +9,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from vibeservatory.backend.dashboard_backend.cogames_diagnose import router as diagnose_router
-from vibeservatory.backend.dashboard_backend.cogames_diagnose.router import (
-    create_cogames_diagnose_router,
-)
 from vibeservatory.backend.dashboard_backend.config import settings
+from vibeservatory.backend.dashboard_backend.diagnose import router as diagnose_router
+from vibeservatory.backend.dashboard_backend.diagnose.router import (
+    create_diagnose_router,
+)
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -59,7 +59,7 @@ def _write_bundle(bundle_path: Path, *, run_id: str, policy: str = "uploaded-pol
         bundle.writestr("portable_bundle/replay_bundle.zip", "zip-bytes")
 
 
-def test_cogames_diagnose_router_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_diagnose_router_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     run_id = "run_123-abc.def"
     run_dir = tmp_path / run_id
     run_dir.mkdir(parents=True)
@@ -106,10 +106,10 @@ def test_cogames_diagnose_router_smoke(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setattr(settings, "DASHBOARD_COGAMES_DIAGNOSE_ROOT", str(tmp_path))
 
     app = FastAPI()
-    app.include_router(create_cogames_diagnose_router())
+    app.include_router(create_diagnose_router())
     client = TestClient(app, base_url="http://localhost")
 
-    runs_response = client.get("/dashboard/v1/cogames-diagnose/runs")
+    runs_response = client.get("/diagnose/v1/runs")
     assert runs_response.status_code == 200
     assert runs_response.json() == {
         "runs": [
@@ -134,44 +134,40 @@ def test_cogames_diagnose_router_smoke(tmp_path: Path, monkeypatch: pytest.Monke
         ]
     }
 
-    manifest_response = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/manifest")
+    manifest_response = client.get(f"/diagnose/v1/runs/{run_id}/manifest")
     assert manifest_response.status_code == 200
     assert manifest_response.json()["run_id"] == run_id
 
-    doctor_note_response = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/doctor-note")
+    doctor_note_response = client.get(f"/diagnose/v1/runs/{run_id}/doctor-note")
     assert doctor_note_response.status_code == 200
     assert doctor_note_response.json()["run_id"] == run_id
 
-    artifact_response = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/artifacts/diagnose_report.html")
+    artifact_response = client.get(f"/diagnose/v1/runs/{run_id}/artifacts/diagnose_report.html")
     assert artifact_response.status_code == 200
     assert artifact_response.text == "<html>report</html>"
     assert artifact_response.headers["content-type"] == "text/html; charset=utf-8"
 
-    nested_artifact = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/artifacts/replays/episode_0.json.z")
+    nested_artifact = client.get(f"/diagnose/v1/runs/{run_id}/artifacts/replays/episode_0.json.z")
     assert nested_artifact.status_code == 200
     assert nested_artifact.text == "{}"
     assert nested_artifact.headers["content-type"] == "application/octet-stream"
 
-    nested_plus_artifact = client.get(
-        f"/dashboard/v1/cogames-diagnose/runs/{run_id}/artifacts/replays/episode%2Bmeta.json.zst"
-    )
+    nested_plus_artifact = client.get(f"/diagnose/v1/runs/{run_id}/artifacts/replays/episode%2Bmeta.json.zst")
     assert nested_plus_artifact.status_code == 200
     assert nested_plus_artifact.text == "{}"
     assert nested_plus_artifact.headers["content-type"] == "application/octet-stream"
 
-    disallowed_artifact = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/artifacts/not-allowlisted.txt")
+    disallowed_artifact = client.get(f"/diagnose/v1/runs/{run_id}/artifacts/not-allowlisted.txt")
     assert disallowed_artifact.status_code == 404
 
-    traversal_artifact = client.get(
-        f"/dashboard/v1/cogames-diagnose/runs/{run_id}/artifacts/replays/%2E%2E/diagnose_report.html"
-    )
+    traversal_artifact = client.get(f"/diagnose/v1/runs/{run_id}/artifacts/replays/%2E%2E/diagnose_report.html")
     assert traversal_artifact.status_code == 422
 
-    invalid_run_id = client.get("/dashboard/v1/cogames-diagnose/runs/%2E%2E/manifest")
+    invalid_run_id = client.get("/diagnose/v1/runs/%2E%2E/manifest")
     assert invalid_run_id.status_code == 422
 
 
-def test_cogames_diagnose_router_rejects_manifest_without_artifact_files(
+def test_diagnose_router_rejects_manifest_without_artifact_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -213,19 +209,19 @@ def test_cogames_diagnose_router_rejects_manifest_without_artifact_files(
     monkeypatch.setattr(settings, "DASHBOARD_COGAMES_DIAGNOSE_ROOT", str(tmp_path))
 
     app = FastAPI()
-    app.include_router(create_cogames_diagnose_router())
+    app.include_router(create_diagnose_router())
     client = TestClient(app, base_url="http://localhost")
 
-    manifest_response = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/manifest")
+    manifest_response = client.get(f"/diagnose/v1/runs/{run_id}/manifest")
     assert manifest_response.status_code == 200
     assert manifest_response.json()["run_id"] == run_id
 
-    artifact_response = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/artifacts/diagnose_report.html")
+    artifact_response = client.get(f"/diagnose/v1/runs/{run_id}/artifacts/diagnose_report.html")
     assert artifact_response.status_code == 422
     assert artifact_response.json()["detail"] == "Manifest missing artifact_files"
 
 
-def test_cogames_diagnose_router_upload_bundle_imports_run(
+def test_diagnose_router_upload_bundle_imports_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -236,12 +232,12 @@ def test_cogames_diagnose_router_upload_bundle_imports_run(
     monkeypatch.setattr(settings, "DASHBOARD_COGAMES_DIAGNOSE_ROOT", str(tmp_path))
 
     app = FastAPI()
-    app.include_router(create_cogames_diagnose_router())
+    app.include_router(create_diagnose_router())
     client = TestClient(app, base_url="http://localhost")
 
     with bundle_path.open("rb") as bundle_file:
         upload_response = client.post(
-            "/dashboard/v1/cogames-diagnose/runs/upload",
+            "/diagnose/v1/runs/upload",
             files={"bundle": (bundle_path.name, bundle_file, "application/zip")},
         )
     assert upload_response.status_code == 200
@@ -251,16 +247,16 @@ def test_cogames_diagnose_router_upload_bundle_imports_run(
     assert imported_manifest_path.is_file()
     assert json.loads(imported_manifest_path.read_text())["policy"] == "uploaded-policy"
 
-    runs_response = client.get("/dashboard/v1/cogames-diagnose/runs")
+    runs_response = client.get("/diagnose/v1/runs")
     assert runs_response.status_code == 200
     assert runs_response.json()["runs"][0]["run_id"] == run_id
 
-    doctor_note_response = client.get(f"/dashboard/v1/cogames-diagnose/runs/{run_id}/doctor-note")
+    doctor_note_response = client.get(f"/diagnose/v1/runs/{run_id}/doctor-note")
     assert doctor_note_response.status_code == 200
     assert doctor_note_response.json()["run_id"] == run_id
 
 
-def test_cogames_diagnose_router_upload_bundle_keeps_existing_run_when_import_fails(
+def test_diagnose_router_upload_bundle_keeps_existing_run_when_import_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -317,12 +313,12 @@ def test_cogames_diagnose_router_upload_bundle_keeps_existing_run_when_import_fa
     monkeypatch.setattr(diagnose_router.shutil, "copyfileobj", _failing_copyfileobj)
 
     app = FastAPI()
-    app.include_router(create_cogames_diagnose_router())
+    app.include_router(create_diagnose_router())
     client = TestClient(app, base_url="http://localhost")
 
     with bundle_path.open("rb") as bundle_file:
         upload_response = client.post(
-            "/dashboard/v1/cogames-diagnose/runs/upload",
+            "/diagnose/v1/runs/upload",
             files={"bundle": (bundle_path.name, bundle_file, "application/zip")},
         )
 
@@ -333,7 +329,7 @@ def test_cogames_diagnose_router_upload_bundle_keeps_existing_run_when_import_fa
     assert (run_dir / "replay_bundle.zip").read_text(encoding="utf-8") == "existing-zip-bytes"
 
 
-def test_cogames_diagnose_router_upload_bundle_streams_large_artifacts(
+def test_diagnose_router_upload_bundle_streams_large_artifacts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -353,12 +349,12 @@ def test_cogames_diagnose_router_upload_bundle_streams_large_artifacts(
     monkeypatch.setattr(settings, "DASHBOARD_COGAMES_DIAGNOSE_ROOT", str(tmp_path))
 
     app = FastAPI()
-    app.include_router(create_cogames_diagnose_router())
+    app.include_router(create_diagnose_router())
     client = TestClient(app, base_url="http://localhost")
 
     with bundle_path.open("rb") as bundle_file:
         upload_response = client.post(
-            "/dashboard/v1/cogames-diagnose/runs/upload",
+            "/diagnose/v1/runs/upload",
             files={"bundle": (bundle_path.name, bundle_file, "application/zip")},
         )
 

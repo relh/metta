@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vibeservatory.backend.dashboard_backend.state_page.diagnostics import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.diagnostics import (
     DashboardEpisode,
     compute_derived_metrics,
     compute_episode_behavior_tags,

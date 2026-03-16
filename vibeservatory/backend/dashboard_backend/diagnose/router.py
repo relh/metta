@@ -279,8 +279,8 @@ def _import_bundle(upload: UploadFile) -> DiagnoseRunSummary:
     return DiagnoseRunSummary(run_id=run_id, manifest=manifest_payload)
 
 
-def create_cogames_diagnose_router() -> APIRouter:
-    router = APIRouter(prefix="/dashboard/v1/cogames-diagnose", tags=["dashboard"])
+def create_diagnose_router() -> APIRouter:
+    router = APIRouter(prefix="/diagnose/v1", tags=["diagnose"])
 
     @router.get("/runs")
     @timed_http_handler

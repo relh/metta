@@ -14,8 +14,9 @@ export * from './api.types'
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8010'
 const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
 const SESSION_TOKEN_KEY = 'policy-dashboard-auth-token'
-const POLICY_VERSIONS_BASE_PATH = '/dashboard/v1/policies/versions'
-const DIAGNOSE_RUNS_BASE_PATH = '/dashboard/v1/cogames-diagnose/runs'
+const POLICY_VERSIONS_BASE_PATH = '/policy-dashboard/v1/policies/versions'
+const DIAGNOSE_RUNS_BASE_PATH = '/diagnose/v1/runs'
+const PANTHEON_STORIES_PATH = '/pantheon/v1/stories'
 
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
@@ -238,7 +239,7 @@ export async function uploadDiagnoseBundle(bundle: File): Promise<DiagnoseUpload
 }
 
 export async function fetchPantheonStories(): Promise<PantheonStoriesResponse> {
-  return await dashboardRequest<PantheonStoriesResponse>('/dashboard/v1/pantheon/stories')
+  return await dashboardRequest<PantheonStoriesResponse>(PANTHEON_STORIES_PATH)
 }
 
 export function diagnoseArtifactUrl(runId: string, artifact: string): string {

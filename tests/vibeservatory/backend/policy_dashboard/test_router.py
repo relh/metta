@@ -11,10 +11,10 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from vibeservatory.backend.dashboard_backend.state_page.router import (
+from vibeservatory.backend.dashboard_backend.policy_dashboard.router import (
     _agent_indices_from_tags,
     _default_winner_policy_version_id,
-    create_dashboard_router,
+    create_policy_dashboard_router,
 )
 
 
@@ -75,19 +75,19 @@ def test_default_dashboard_data_returns_404_when_default_policy_missing(monkeypa
         yield SimpleNamespace()
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._default_winner_policy_version_id",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._default_winner_policy_version_id",
         fake_default_winner_policy_version_id,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.db_session",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.db_session",
         fake_db_session,
     )
 
     app = FastAPI()
-    app.include_router(create_dashboard_router())
+    app.include_router(create_policy_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/policies/versions/default/data")
+    response = client.get("/policy-dashboard/v1/policies/versions/default/data")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "No default policy version available"
@@ -114,7 +114,7 @@ def test_default_winner_policy_version_prefers_default_season_leader(monkeypatch
         return _FakeCommissioner()
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.build_commissioner",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.build_commissioner",
         fake_build_commissioner,
     )
 
@@ -163,7 +163,7 @@ def test_default_winner_policy_version_falls_back_when_default_has_no_leader(mon
         return _FakeCommissioner([(fallback_policy_id, 1.0, 10)])
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.build_commissioner",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.build_commissioner",
         fake_build_commissioner,
     )
 
@@ -243,36 +243,36 @@ def test_dashboard_data_builds_commissioner_with_season_id(
         yield session
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._require_policy_version",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._require_policy_version",
         fake_require_policy_version,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._default_winner_policy_version_id",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._default_winner_policy_version_id",
         fake_default_winner_policy_version_id,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._fetch_policy_dashboard_sources",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._fetch_policy_dashboard_sources",
         fake_fetch_sources,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._build_sorted_dashboard_episodes",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._build_sorted_dashboard_episodes",
         fake_build_sorted_dashboard_episodes,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.build_commissioner",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.build_commissioner",
         fake_build_commissioner,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.db_session",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.db_session",
         fake_db_session,
     )
 
     app = FastAPI()
-    app.include_router(create_dashboard_router())
+    app.include_router(create_policy_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get(f"/dashboard/v1/policies/versions/{policy_version_id}/data")
-    default_response = client.get("/dashboard/v1/policies/versions/default/data")
+    response = client.get(f"/policy-dashboard/v1/policies/versions/{policy_version_id}/data")
+    default_response = client.get("/policy-dashboard/v1/policies/versions/default/data")
 
     assert response.status_code == 200
     assert default_response.status_code == 200
@@ -342,36 +342,36 @@ def test_dashboard_data_embeds_role_percentiles_when_requested(monkeypatch: Any)
         yield session
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._require_policy_version",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._require_policy_version",
         fake_require_policy_version,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._fetch_policy_dashboard_sources",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._fetch_policy_dashboard_sources",
         fake_fetch_sources,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._build_sorted_dashboard_episodes",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._build_sorted_dashboard_episodes",
         fake_build_sorted_dashboard_episodes,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._build_role_percentiles_response",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._build_role_percentiles_response",
         fake_build_role_percentiles_response,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._build_diagnose_run_summaries",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._build_diagnose_run_summaries",
         fake_build_diagnose_run_summaries,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.db_session",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.db_session",
         fake_db_session,
     )
 
     app = FastAPI()
-    app.include_router(create_dashboard_router())
+    app.include_router(create_policy_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
     response = client.get(
-        f"/dashboard/v1/policies/versions/{policy_version_id}/data?include=role_percentiles,diagnose_runs"
+        f"/policy-dashboard/v1/policies/versions/{policy_version_id}/data?include=role_percentiles,diagnose_runs"
     )
     assert response.status_code == 200
     payload = response.json()
@@ -379,7 +379,7 @@ def test_dashboard_data_embeds_role_percentiles_when_requested(monkeypatch: Any)
     assert payload["diagnose_runs"][0]["run_id"] == "run-1"
     assert include_calls == [policy_version_id]
 
-    response_without_include = client.get(f"/dashboard/v1/policies/versions/{policy_version_id}/data")
+    response_without_include = client.get(f"/policy-dashboard/v1/policies/versions/{policy_version_id}/data")
     assert response_without_include.status_code == 200
     payload_without_include = response_without_include.json()
     assert payload_without_include["role_percentiles"] is None
@@ -437,27 +437,27 @@ def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:
         ]
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._require_policy_version",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._require_policy_version",
         fake_require_policy_version,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.db_session",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.db_session",
         fake_db_session,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._candidate_role_pools_for_policy",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._candidate_role_pools_for_policy",
         fake_candidate_role_pools_for_policy,
     )
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router.compute_policy_role_percentiles",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router.compute_policy_role_percentiles",
         fake_compute_policy_role_percentiles,
     )
 
     app = FastAPI()
-    app.include_router(create_dashboard_router())
+    app.include_router(create_policy_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get(f"/dashboard/v1/policies/versions/{policy_version_id}/role-percentiles")
+    response = client.get(f"/policy-dashboard/v1/policies/versions/{policy_version_id}/role-percentiles")
     assert response.status_code == 200
     body = response.json()
     assert body["pool_id"] == str(second_pool_id)
@@ -473,15 +473,15 @@ def test_dashboard_analysis_uses_bedrock_without_request_key(monkeypatch: Any) -
         raise HTTPException(status_code=418, detail="bedrock-path-reached")
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._require_policy_version",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._require_policy_version",
         fake_require_policy_version,
     )
 
     app = FastAPI()
-    app.include_router(create_dashboard_router())
+    app.include_router(create_policy_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.post(f"/dashboard/v1/policies/versions/{uuid4()}/analysis")
+    response = client.post(f"/policy-dashboard/v1/policies/versions/{uuid4()}/analysis")
     assert response.status_code == 418
     assert response.json()["detail"] == "bedrock-path-reached"
 
@@ -491,16 +491,16 @@ def test_dashboard_analysis_accepts_request_scoped_api_key(monkeypatch: Any) -> 
         raise HTTPException(status_code=418, detail="request-key-path-reached")
 
     monkeypatch.setattr(
-        "vibeservatory.backend.dashboard_backend.state_page.router._require_policy_version",
+        "vibeservatory.backend.dashboard_backend.policy_dashboard.router._require_policy_version",
         fake_require_policy_version,
     )
 
     app = FastAPI()
-    app.include_router(create_dashboard_router())
+    app.include_router(create_policy_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
     response = client.post(
-        f"/dashboard/v1/policies/versions/{uuid4()}/analysis",
+        f"/policy-dashboard/v1/policies/versions/{uuid4()}/analysis",
         headers={"X-Anthropic-Api-Key": "sk-ant-test"},
     )
     assert response.status_code == 418

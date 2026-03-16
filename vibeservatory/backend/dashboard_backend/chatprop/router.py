@@ -60,7 +60,7 @@ def _resolve_flowchart_graph_or_400(
 
 
 def create_chatprop_router() -> APIRouter:
-    router = APIRouter(prefix=CHATPROP_BASE_PATH, tags=["dashboard"])
+    router = APIRouter(prefix=CHATPROP_BASE_PATH, tags=["chatprop"])
 
     @router.get("", include_in_schema=False)
     @router.get("/", include_in_schema=False)

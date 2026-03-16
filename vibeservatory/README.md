@@ -1,13 +1,14 @@
-# Vibeservatory Dashboard
+# Vibeservatory Surfaces
 
-Canonical docs for the Vibeservatory backend live here.
+Canonical docs for the Vibeservatory surface backend live here.
 
 Related code paths:
 
 - Backend: `vibeservatory/backend/dashboard_backend/`
 - Standalone frontend: `dashboard/`
 - Standalone surface frontends: `bardo/`, `pantheon/`, `diagnose/`
-- Surface folders: `policy-dashboard/` (docs alias for dashboard route), `pantheon/`, `diagnose/`, `chatprop/`, `trainboard/`, `bardo/`
+- Surface folders: `policy-dashboard/` (docs alias for dashboard route), `pantheon/`, `diagnose/`, `chatprop/`,
+  `trainboard/`, `bardo/`
 - Dev/smoke scripts: `vibeservatory/scripts/`
 - Additional docs: `vibeservatory/docs/`
 - Surface contract: `vibeservatory/iframe_surfaces.json`
@@ -17,19 +18,39 @@ Related code paths:
 Canonical naming and ownership:
 
 - `Vibeservatory` is the service that hosts these six surfaces and their backend endpoints.
-- `Observatory` (`softmax.com/observatory`) is a separate service/deployment that embeds Vibeservatory surfaces in iframes.
+- `Observatory` (`softmax.com/observatory`) is a separate service/deployment that embeds Vibeservatory surfaces in
+  iframes.
 - These services run in parallel; Observatory is not the host of the surface apps.
+
+## Surface Ownership
+
+The six embedded surfaces are peers. Each surface owns:
+
+- a frontend host path
+- a backend route namespace on the shared Vibeservatory backend
+- a backend router module inside `vibeservatory/backend/dashboard_backend/`
+
+Current ownership map:
+
+- `policy-dashboard`: frontend `/policy-dashboard`, backend namespace `/policy-dashboard/v1/...`, backend module
+  `policy_dashboard/router.py`
+- `bardo`: frontend `/bardo`, backend namespace `/bardo/v1/...`, backend module `bardo/router.py`
+- `pantheon`: frontend `/pantheon`, backend namespace `/pantheon/v1/...`, backend module `pantheon/router.py`
+- `diagnose`: frontend `/diagnose`, backend namespace `/diagnose/v1/...`, backend module `diagnose/router.py`
+- `chatprop`: frontend `/chatprop`, backend namespace `/chatprop/...`, backend module `chatprop/router.py`
+- `trainboard`: frontend `/train-board`, backend namespace `/train-board/...`, backend module `trainboard/router.py`
 
 ## Backend
 
 What it does:
 
-- Serves Vibeservatory dashboard endpoints from `vibeservatory/backend/dashboard_backend/state_page/router.py`
-- Also mounts role-stats endpoints from `vibeservatory/backend/dashboard_backend/role_stats/router.py`
-- Mounts all six surface backends (bardo, pantheon, policy-dashboard, chatprop, trainboard, diagnose)
+- Mounts the six peer surface backends (policy-dashboard, bardo, pantheon, diagnose, chatprop, trainboard)
+- Keeps route ownership per-surface rather than treating `policy-dashboard`, `pantheon`, and `diagnose` as generic
+  dashboard subfeatures
+- Also mounts shared role-stats endpoints from `vibeservatory/backend/dashboard_backend/role_stats/router.py`
 - Exposes internal docs at `http://127.0.0.1:8010/internal/docs`
 - Hides public docs (`/docs` is disabled)
-- Forces read-only DB usage for all dashboard queries in this process
+- Forces read-only DB usage for the read-mostly surface queries in this process
 - Blocks write SQL statements via a statement guard
 
 Run:

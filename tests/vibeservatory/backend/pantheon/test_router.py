@@ -25,7 +25,7 @@ def test_pantheon_router_returns_seeded_stories_when_no_files(
     app.include_router(create_pantheon_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/pantheon/stories")
+    response = client.get("/pantheon/v1/stories")
     assert response.status_code == 200
     payload = response.json()
 
@@ -76,7 +76,7 @@ def test_pantheon_router_prefers_filesystem_stories(
     app.include_router(create_pantheon_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/pantheon/stories")
+    response = client.get("/pantheon/v1/stories")
     assert response.status_code == 200
     payload = response.json()
 
@@ -124,7 +124,7 @@ def test_pantheon_router_skips_invalid_files_and_stories(
     app.include_router(create_pantheon_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/pantheon/stories")
+    response = client.get("/pantheon/v1/stories")
     assert response.status_code == 200
     payload = response.json()
 
@@ -144,6 +144,6 @@ def test_pantheon_router_requires_softmax_auth_when_dev_bypass_disabled(
     app.include_router(create_pantheon_router())
     client = TestClient(app, base_url="http://dashboard.example.com")
 
-    response = client.get("/dashboard/v1/pantheon/stories")
+    response = client.get("/pantheon/v1/stories")
     assert response.status_code == 401
     assert response.json()["detail"] == "Failed to authenticate"

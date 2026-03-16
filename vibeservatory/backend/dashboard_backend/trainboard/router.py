@@ -40,7 +40,7 @@ def _query_int(value: str | None, *, default: int, minimum: int, maximum: int) -
 
 
 def create_trainboard_router() -> APIRouter:
-    router = APIRouter(prefix=TRAINBOARD_BASE_PATH, tags=["dashboard"])
+    router = APIRouter(prefix=TRAINBOARD_BASE_PATH, tags=["trainboard"])
 
     @router.get("", include_in_schema=False)
     @router.get("/", include_in_schema=False)
